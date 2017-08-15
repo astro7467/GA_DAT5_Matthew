@@ -15,7 +15,7 @@ a[1:3]      # returns [2, 3] (inclusive of first index but exclusive of second)
 a[-1]       # returns 5 (last element)
 
 # appending
-a[5] = 6        # error because you can't assign outside the existing range
+#a[5] = 6        # error because you can't assign outside the existing range
 a.append(6)     # list method that appends 6 to the end
 a = a + [0]     # use plus sign to combine lists
 
@@ -29,7 +29,7 @@ type(a[0])  # returns int
 # sorting
 sorted(a)               # sorts the list
 sorted(a, reverse=True) # reverse=True is an 'optional argument'
-sorted(a, True)         # error because optional arguments must be named
+#sorted(a, True)         # error because optional arguments must be named
 
 
 '''
@@ -46,11 +46,11 @@ a[-1]       # returns 'o'
 
 # concatenating
 a + ' there'        # use plus sign to combine strings
-5 + ' there'        # error because they are different types
+#5 + ' there'        # error because they are different types
 str(5) + ' there'   # cast 5 to a string in order for this to work
 
 # uppercasing
-a[0] = 'H'      # error because strings are immutable (can't overwrite characters)
+#a[0] = 'H'      # error because strings are immutable (can't overwrite characters)
 a.upper()       # string method (this method doesn't exist for lists)
 
 # checking length
@@ -69,14 +69,19 @@ EXERCISE:
 Bonus: Sort the list by the length of the names (shortest to longest).
 '''
 
-# list of names
-# last element
-# length of first string
-# overwrite existing element
-# append new element
-# change last string to be lowercase
-# sort the list in reverse order
-# sort the list by length
+names=["Australia","New Zealand","Singapore","Indonesia","Malaysia","China"]
+print names
+print "Last names in List:", names[-1]
+print "Length of 1st name:", len(names[0]),"{"+names[0]+"}"
+names[0]="Down Under"
+print names
+names.append("Thailand")
+print names
+names[-1]=names[-1].lower()
+print names
+print sorted(names, reverse=True)
+print sorted(names, key=len)
+
 
 
 '''
@@ -120,12 +125,25 @@ Write a list comprehension that returns: ['A', 'B', 'C']
 letters = ['a', 'b', 'c']
 # iterate through a list of strings,
 # and each string has an 'upper' method
+newletters=[]
+for letter in letters:
+    newletters.append(letter.upper())
+print letters, 
+print newletters
+
 word = 'abc'
 # iterate through each character
+wordlist=[]
+for letter in word:
+    wordlist.append(letter.upper())
+print word,wordlist
 
 fruits = ['Apple', 'Banana', 'Cherry']
 # slice the first character from each string
-
+firstchar=[]
+for fruit in fruits:
+    firstchar.append(fruit[0].upper())
+print fruits, firstchar
 
 '''
 DICTIONARIES
@@ -141,10 +159,10 @@ len(family)         # returns 3 (number of key-value pairs)
 family['dad']       # returns 'Homer'
 
 # can't use a value to look up a key
-family['Homer']     # error
+#family['Homer']     # error
 
 # dictionaries are unordered
-family[0]           # error
+#family[0]           # error
 
 # add a new entry
 family['cat'] = 'snowball'
@@ -159,7 +177,7 @@ del family['cat']
 family['kids'] = ['bart', 'lisa']   # value can be a list
 
 # accessing a list element within a dictionary
-family['kids'][0]   # returns 'bart'
+print family['kids'][0]   # returns 'bart'
 
 # useful methods
 family.keys()       # returns list: ['dad', 'kids', 'mom', 'size']
@@ -177,16 +195,33 @@ EXERCISE:
 Bonus: Do this last step using a list comprehension.
 '''
 
+print family['mom']
 # returns 'Marge'
+
 # replaces existing value for 'size'
+family['size']=5
 # access a list, then append 'Maggie' to it
-# capitalize names by overwriting them
+family['kids'].append('Maggie')
 
+print 'capitalize names by overwriting them'
+rough_kids=family['kids'][:]
+print family['kids']
+family['kids'][0]="Bart"
+family['kids'][1]="Lisa"
+print family['kids']
 
-# or, capitalize using a list comprehension and the 'capitalize' string method
+print "capitalize using a list comprehension and the 'capitalize' string method"
+family['kids']=rough_kids[:]
+print family['kids']
+family['kids']=[name.capitalize() for name in family['kids']]
+print family['kids']
 
-
-# or, slice the string, uppercase the first letter, and concatenate with other letters
+print "slice the string, uppercase the first letter, and concatenate with other letters"
+family['kids']=rough_kids[:]
+print family['kids']
+for index in range(len(family['kids'])):
+    family['kids'][index]=family['kids'][index][0].upper()+family['kids'][index][1:].lower()
+print family['kids']
 
 
 
@@ -225,15 +260,15 @@ API key: http://bit.ly/myechonest
 '''
 
 # request data from the Echo Nest API
-r = requests.get('http://developer.echonest.com/api/v4/artist/top_hottt?api_key=KBGUPZPJZS9PHWNIN&format=json')
-r.text          # looks like a dictionary
-type(r.text)    # actually stored as a string
-r.json()        # decodes JSON
-type(r.json())  # JSON can be represented as a dictionary
-top = r.json()  # store that dictionary
-
-# store the artist data
-artists = top['response']['artists']    # list of 15 dictionaries
-
-# create a list of artist names only
-names = [artist['name'] for artist in artists]  # can iterate through list to access dictionaries
+#r = requests.get('http://developer.echonest.com/api/v4/artist/top_hottt?api_key=KBGUPZPJZS9PHWNIN&format=json')
+#r.text          # looks like a dictionary
+#type(r.text)    # actually stored as a string
+#r.json()        # decodes JSON
+#type(r.json())  # JSON can be represented as a dictionary
+#top = r.json()  # store that dictionary
+#
+## store the artist data
+#artists = top['response']['artists']    # list of 15 dictionaries
+#
+## create a list of artist names only
+#names = [artist['name'] for artist in artists]  # can iterate through list to access dictionaries
