@@ -51,7 +51,7 @@ header = file_nested_list[0]
 data = file_nested_list[1:]
 print header
 print '--------------------'
-print data[:5]
+for row in data: print row
 print '============================================='
 
 '''
@@ -74,7 +74,7 @@ Expected output: {'Aer Lingus': 0.07, 'Aeroflot': 2.73, ...}
 
 # Part 1
 incidents = [round((int(row[2]) + int(row[5])) / float(30), 2) for row in data]
-print incidents
+for incident in incidents: print incident
 
 # Parts 2 and 3
 airlines = []
@@ -87,12 +87,12 @@ for row in data:
         starred.append(0)
         airlines.append(row[0])
 
-print airlines
-print starred
+for item in range(len(airlines)): print starred[item], str(incidents[item]).rjust(8),airlines[item]
+#for star in starred: print star
 # Part 4
 airline_incidents = dict(zip(airlines, incidents))
 
-print airline_incidents 
+for airline in airlines: print "Airline:", airline.ljust(25), "Incidents:",airline_incidents[airline]
 
 '''
 A few extra things that will help you with the homework
