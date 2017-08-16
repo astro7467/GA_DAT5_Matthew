@@ -125,25 +125,22 @@ Write a list comprehension that returns: ['A', 'B', 'C']
 letters = ['a', 'b', 'c']
 # iterate through a list of strings,
 # and each string has an 'upper' method
-newletters=[]
-for letter in letters:
-    newletters.append(letter.upper())
-print letters, 
-print newletters
+newletters=[letter.upper() for letter in letters]
+print "Letters:".rjust(12),letters 
+print "NewLetters:".rjust(12),newletters
 
 word = 'abc'
 # iterate through each character
-wordlist=[]
-for letter in word:
-    wordlist.append(letter.upper())
-print word,wordlist
+charlist=[letter.upper() for letter in word]
+print "Word:".rjust(12),word
+print "CharList:".rjust(12),charlist
 
 fruits = ['Apple', 'Banana', 'Cherry']
 # slice the first character from each string
-firstchar=[]
-for fruit in fruits:
-    firstchar.append(fruit[0].upper())
-print fruits, firstchar
+firstchar=[fruit[0].upper() for fruit in fruits]
+print "Fruits:".rjust(12),fruits
+print "FirstChar:".rjust(12),firstchar
+
 
 '''
 DICTIONARIES
@@ -205,23 +202,23 @@ family['kids'].append('Maggie')
 
 print 'capitalize names by overwriting them'
 rough_kids=family['kids'][:]
-print family['kids']
+print "Old:",family['kids']
 family['kids'][0]="Bart"
 family['kids'][1]="Lisa"
-print family['kids']
+print "New:",family['kids']
 
 print "capitalize using a list comprehension and the 'capitalize' string method"
 family['kids']=rough_kids[:]
-print family['kids']
+print "Old:",family['kids']
 family['kids']=[name.capitalize() for name in family['kids']]
-print family['kids']
+print "New:",family['kids']
 
 print "slice the string, uppercase the first letter, and concatenate with other letters"
 family['kids']=rough_kids[:]
-print family['kids']
+print "Old:",family['kids']
 for index in range(len(family['kids'])):
     family['kids'][index]=family['kids'][index][0].upper()+family['kids'][index][1:].lower()
-print family['kids']
+print "New:",family['kids']
 
 
 
