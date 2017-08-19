@@ -196,30 +196,36 @@ print family['mom']
 # returns 'Marge'
 
 # replaces existing value for 'size'
-family['size']=5
+family['size'] = 5
 # access a list, then append 'Maggie' to it
 family['kids'].append('Maggie')
 
 print 'capitalize names by overwriting them'
-rough_kids=family['kids'][:]
-print "Old:",family['kids']
-family['kids'][0]="Bart"
-family['kids'][1]="Lisa"
-print "New:",family['kids']
+rough_kids = family['kids'][:]
+print "Old:", family['kids']
+family['kids'][0] = "Bart"
+family['kids'][1] = "Lisa"
+print "New:", family['kids']
 
 print "capitalize using a list comprehension and the 'capitalize' string method"
-family['kids']=rough_kids[:]
-print "Old:",family['kids']
-family['kids']=[name.capitalize() for name in family['kids']]
-print "New:",family['kids']
+family['kids'] = rough_kids[:]
+print "Old:", family['kids']
+family['kids'] = [name.capitalize() for name in family['kids']]
+print "New:", family['kids']
 
 print "slice the string, uppercase the first letter, and concatenate with other letters"
-family['kids']=rough_kids[:]
-print "Old:",family['kids']
+family['kids'] = rough_kids[:]
+print "Old:", family['kids']
 for index in range(len(family['kids'])):
-    family['kids'][index]=family['kids'][index][0].upper()+family['kids'][index][1:].lower()
-print "New:",family['kids']
+    family['kids'][index] = family['kids'][index][0].upper() + family['kids'][index][1:].lower()
+print "New:", family['kids']
 
+print "Enumerated list : slice the string, uppercase the first letter, and concatenate with other letters"
+family['kids'] = rough_kids[:]
+print "Old:", family['kids']
+for index, kid in enumerate(family['kids']):
+    family['kids'][index] = kid[0].upper() + kid[1:].lower()
+print "New:", family['kids']
 
 
 '''
