@@ -31,8 +31,8 @@ for row in data[:10]: print row
 
 # Minor cleansing of data - Appears to be some significance to '[..]' - but not for us...currently
 for row in data:
-    row[3]=re.sub(r'[\[\]]','',row[3])
-    if row[3] == 'NULL': row[3]=''
+    row[idx_order_desc]=re.sub(r'[\[\]]','',row[idx_order_desc])
+    if row[idx_order_desc] == 'NULL': row[idx_order_desc]=''
 print "Post Cleanse:"
 for row in data[:10]: print row
 
@@ -47,16 +47,21 @@ order_id	quantity	item_name	choice_description	item_price
 0        1       2            3                    4
 
 '''
+idx_order_id=0
+idx_order_qty=1
+idx_order_item=2
+idx_order_desc=3
+idx_order_price=4
 
 # count the number of unique order_id's
 # note: you could assume this is 1834 since that's the maximum order_id, but it's best to check
-order_ids=set([row[0] for row in data])
+order_ids=set([row[idx_order_id] for row in data])
 print "No. Unique Orders:".rjust(30), str(len(order_ids)).rjust(10)
 
 # create a list of prices
 # note: ignore the 'quantity' column because the 'item_price' takes quantity into account
 # strip the dollar sign and trailing space
-order_item_price=[float(re.sub(r'[^\d.]','',row[4])) for row in data]
+order_item_price=[float(re.sub(r'[^\d.]','',row[idx_order_price])) for row in data]
 #print order_item_price
 orders_total_price=sum(order_item_price)
 avg_order_price=round(orders_total_price/len(order_ids),2)
@@ -75,21 +80,21 @@ Note: Just look for 'Canned Soda' and 'Canned Soft Drink', and ignore other drin
 # if 'item_name' includes 'Canned', append 'choice_description' to 'sodas' list
 sodas=[]
 for row in data:
-    if 'canned' in row[2].lower() and row[3].lower() not in sodas:
-        sodas.append(row[3].lower())
+    if 'canned' in row[idx_order_item].lower() and row[idx_order_desc].lower() not in sodas:
+        sodas.append(row[idx_order_desc].lower())
 
 print "For/If:".rjust(20), sorted(sodas)
 
 # equivalent list comprehension (using an 'if' condition)
 sodas=set()
-sodas=set([row[3].lower() for row in data if 'canned' in row[2].lower()])
+sodas=set([row[idx_order_desc].lower() for row in data if 'canned' in row[idx_order_item].lower()])
 print "List Comprehension:".rjust(20), sorted(sodas)
 
 # create a set of unique sodas
 sodas=set()
 for row in data:
-    if 'canned' in row[2].lower():
-        sodas.add(row[3].lower())
+    if 'canned' in row[idx_order_item].lower():
+        sodas.add(row[idx_order_desc].lower())
 print "For/Set.Add:".rjust(20), sorted(sodas)
 
 
@@ -100,9 +105,9 @@ PART 5: Calculate the average number of toppings per burrito.
 Note: Let's ignore the 'quantity' column to simplify this task.
 Hint: Think carefully about the easiest way to count the number of toppings!
 '''
-burrito_orders=[row for row in data if 'burrito' in row[2].lower()]
+burrito_orders=[row for row in data if 'burrito' in row[idx_order_item].lower()]
 burrito_all_toppings=[]
-for row in burrito_orders: burrito_all_toppings += [item.strip() for item in row[3].split(',')]
+for row in burrito_orders: burrito_all_toppings += [item.strip() for item in row[idx_order_desc].split(',')]
 
 # keep a running total of burritos and toppings
 print "Burrito Orders:"
@@ -117,7 +122,7 @@ print "Total Toppings Served:".rjust(30), str(len(burrito_all_toppings)).rjust(1
 # calculate the average topping count and round to 2 digits
 # 5.40
 print "Average Toppings Per Burrito:".rjust(30),str(round(float(len(burrito_all_toppings))/len(burrito_orders),3)).rjust(10)
-print "No. of Burrito Types:".rjust(30),str(len(set([row[2].lower() for row in burrito_orders]))).rjust(10)
+print "No. of Burrito Types:".rjust(30),str(len(set([row[idx_order_item].lower() for row in burrito_orders]))).rjust(10)
 print "Topping Types:".rjust(30),str(len(set([topping.lower() for topping in burrito_all_toppings]))).rjust(10)
 
 '''
@@ -137,8 +142,8 @@ from collections import defaultdict
 # defaultdict saves you the trouble of checking whether a key already exists
 chips = defaultdict(int)
 for row in data:
-    if 'chips' in row[2].lower():
-        chips[row[2].lower()] += int(row[1])
+    if 'chips' in row[idx_order_item].lower():
+        chips[row[idx_order_item].lower()] += int(row[idx_order_qty])
 
 print chips
 
@@ -147,7 +152,7 @@ print chips
 BONUS: Think of a question about this data that interests you, and then answer it!
 '''
 print "Fix the Qty Issue...."
-burrito_orders=[row for row in data if 'burrito' in row[2].lower()]
+burrito_orders=[row for row in data if 'burrito' in row[idx_order_item].lower()]
 burrito_orders_flat=[]
 track_count=0
 for order in burrito_orders:
@@ -157,7 +162,7 @@ for order in burrito_orders:
         burrito_orders_flat.append(order)
 
 burrito_all_toppings=[]
-for row in burrito_orders_flat: burrito_all_toppings += [item.strip() for item in row[3].split(',')]
+for row in burrito_orders_flat: burrito_all_toppings += [item.strip() for item in row[idx_order_desc].split(',')]
 
 # keep a running total of burritos and toppings
 print "Burrito Orders:"
@@ -173,7 +178,7 @@ print "Total Toppings Served:".rjust(30), str(len(burrito_all_toppings)).rjust(1
 # 5.40
 print "Average Toppings Per Burrito:".rjust(30),str(round(float(len(burrito_all_toppings))/len(burrito_orders_flat),3)).rjust(10)
 
-burrito_types = set([row[2].lower() for row in burrito_orders_flat])
+burrito_types = set([row[idx_order_item].lower() for row in burrito_orders_flat])
 burrito_ordered = defaultdict(int)
 for order in burrito_orders_flat:
     burrito_ordered[order[2].lower()] += 1
