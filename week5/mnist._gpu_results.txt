@@ -1,0 +1,62 @@
+INFO:root:Start training with [gpu(0)]
+INFO:root:Epoch[0] Batch [200]	Speed: 16375.35 samples/sec	accuracy=0.112150
+INFO:root:Epoch[0] Batch [400]	Speed: 20618.06 samples/sec	accuracy=0.114900
+INFO:root:Epoch[0] Batch [600]	Speed: 20481.11 samples/sec	accuracy=0.108600
+INFO:root:Epoch[0] Resetting Data Iterator
+INFO:root:Epoch[0] Time cost=3.176
+INFO:root:Epoch[0] Validation-accuracy=0.113500
+INFO:root:Epoch[1] Batch [200]	Speed: 20517.66 samples/sec	accuracy=0.152250
+INFO:root:Epoch[1] Batch [400]	Speed: 20454.52 samples/sec	accuracy=0.775700
+INFO:root:Epoch[1] Batch [600]	Speed: 19917.30 samples/sec	accuracy=0.916400
+INFO:root:Epoch[1] Resetting Data Iterator
+INFO:root:Epoch[1] Time cost=2.962
+INFO:root:Epoch[1] Validation-accuracy=0.934800
+INFO:root:Epoch[2] Batch [200]	Speed: 20478.54 samples/sec	accuracy=0.941500
+INFO:root:Epoch[2] Batch [400]	Speed: 20573.83 samples/sec	accuracy=0.956100
+INFO:root:Epoch[2] Batch [600]	Speed: 20467.02 samples/sec	accuracy=0.965850
+INFO:root:Epoch[2] Resetting Data Iterator
+INFO:root:Epoch[2] Time cost=2.931
+INFO:root:Epoch[2] Validation-accuracy=0.969100
+INFO:root:Epoch[3] Batch [200]	Speed: 19217.52 samples/sec	accuracy=0.970550
+INFO:root:Epoch[3] Batch [400]	Speed: 19448.55 samples/sec	accuracy=0.974900
+INFO:root:Epoch[3] Batch [600]	Speed: 19907.93 samples/sec	accuracy=0.976950
+INFO:root:Epoch[3] Resetting Data Iterator
+INFO:root:Epoch[3] Time cost=3.081
+INFO:root:Epoch[3] Validation-accuracy=0.979500
+INFO:root:Epoch[4] Batch [200]	Speed: 20051.79 samples/sec	accuracy=0.978250
+INFO:root:Epoch[4] Batch [400]	Speed: 20054.45 samples/sec	accuracy=0.980350
+INFO:root:Epoch[4] Batch [600]	Speed: 20499.53 samples/sec	accuracy=0.982500
+INFO:root:Epoch[4] Resetting Data Iterator
+INFO:root:Epoch[4] Time cost=2.977
+INFO:root:Epoch[4] Validation-accuracy=0.983000
+INFO:root:Epoch[5] Batch [200]	Speed: 20441.45 samples/sec	accuracy=0.983200
+INFO:root:Epoch[5] Batch [400]	Speed: 19725.38 samples/sec	accuracy=0.985050
+INFO:root:Epoch[5] Batch [600]	Speed: 20235.35 samples/sec	accuracy=0.985400
+INFO:root:Epoch[5] Resetting Data Iterator
+INFO:root:Epoch[5] Time cost=2.987
+INFO:root:Epoch[5] Validation-accuracy=0.984500
+INFO:root:Epoch[6] Batch [200]	Speed: 19944.37 samples/sec	accuracy=0.986350
+INFO:root:Epoch[6] Batch [400]	Speed: 18178.05 samples/sec	accuracy=0.987650
+INFO:root:Epoch[6] Batch [600]	Speed: 19840.53 samples/sec	accuracy=0.987600
+INFO:root:Epoch[6] Resetting Data Iterator
+INFO:root:Epoch[6] Time cost=3.119
+INFO:root:Epoch[6] Validation-accuracy=0.986000
+INFO:root:Epoch[7] Batch [200]	Speed: 18645.88 samples/sec	accuracy=0.988250
+INFO:root:Epoch[7] Batch [400]	Speed: 18934.91 samples/sec	accuracy=0.989350
+INFO:root:Epoch[7] Batch [600]	Speed: 19234.93 samples/sec	accuracy=0.989750
+INFO:root:Epoch[7] Resetting Data Iterator
+INFO:root:Epoch[7] Time cost=3.177
+INFO:root:Epoch[7] Validation-accuracy=0.986500
+INFO:root:Epoch[8] Batch [200]	Speed: 19056.19 samples/sec	accuracy=0.989800
+INFO:root:Epoch[8] Batch [400]	Speed: 19648.97 samples/sec	accuracy=0.991000
+INFO:root:Epoch[8] Batch [600]	Speed: 19709.54 samples/sec	accuracy=0.991300
+INFO:root:Epoch[8] Resetting Data Iterator
+INFO:root:Epoch[8] Time cost=3.090
+INFO:root:Epoch[8] Validation-accuracy=0.986600
+INFO:root:Epoch[9] Batch [200]	Speed: 19845.07 samples/sec	accuracy=0.991200
+INFO:root:Epoch[9] Batch [400]	Speed: 19812.81 samples/sec	accuracy=0.992050
+INFO:root:Epoch[9] Batch [600]	Speed: 19376.50 samples/sec	accuracy=0.992950
+INFO:root:Epoch[9] Resetting Data Iterator
+INFO:root:Epoch[9] Time cost=3.058
+INFO:root:Epoch[9] Validation-accuracy=0.986700
+
