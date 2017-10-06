@@ -30,7 +30,7 @@ celerybeat-schedule
 *~
 
 # Week 5 Kaggle Cat vs Dog Data
-week5/test
+#week5/test
 week5/train
 week5/test-pred
 
