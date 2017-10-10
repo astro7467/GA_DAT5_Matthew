@@ -28,3 +28,8 @@ celerybeat-schedule
 
 # Editor backup files
 *~
+
+# project database files
+project/data/*.db.*
+project/corpus
+
