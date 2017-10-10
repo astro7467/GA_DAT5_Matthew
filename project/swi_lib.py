@@ -38,10 +38,10 @@ def normalize_text(text):
 def open_datastores():
     # Config Datastore
     rootConfig = shelve.open('data/config.db', writeback=True)
-    
+
     # Ngram Datastore (Core index)
     rootNgram = shelve.open('data/ngram.db', writeback=True)
-    
+
     # Document Meta Data Datastore
     rootDocMeta = shelve.open('data/docmeta.db', writeback=True)
 
@@ -67,16 +67,22 @@ def sys_config(configStore):
     except:
         configStore['corpus'] = './corpus'
         corpusDir = configStore['corpus']
-    
+
     try:
         ngramWidth = configStore['ngram']
     except:
         configStore['ngram'] = 3
         ngramWidth = configStore['ngram']
-    
+
+    try:
+        StoreDataVersion = configStore['version']
+    except:
+        configStore['version'] = 0.1
+        StoreDataVersion = configStore['version']
+
     configStore.sync()
-    
-    return uuidInstance, corpusDir, ngramWidth
+
+    return uuidInstance, corpusDir, ngramWidth, StoreDataVersion
 
 # Match or Create a UUID for data sources
 def uuid_source(rootSources, srcPath, Instance):
@@ -87,31 +93,33 @@ def uuid_source(rootSources, srcPath, Instance):
         srcUUID = rootSources[srcPath]
 
     rootSources.sync()
-    
+
     return srcUUID
 
 # Initialize Src Records (i.e. Delete for now)
 def init_source(docMetaStore, docStat, srcID, srcPath, srcCat = 'UNK', srcSubCat = 'UNK'):
     srcID = str(srcID)
-    # Flush srcID's Meta Data Record, and set minimum values
-    if docMetaStore.has_key(srcID):
-        del docMetaStore[srcID]
-        
-    docMetaStore[srcID] = {
-        'path':str(srcPath),
-        'cat':str(srcCat),
-        'subcat':str(srcSubCat),
-        'verdate':'UNK',
-        'lastidx':'UNK',
-        'qltyscore':str(0),
-        'indexscore':str(0),
-        'xrefscore':str(0),
-        'ngrams':[] }
-    docMetaStore.sync()
-    
+    # Create srcID for new sources Meta Data Record, and set minimum values
+    if not docMetaStore.has_key(srcID):
+        #del docMetaStore[srcID]
+        docMetaStore[srcID] = {
+            'version'   :0.1,
+            'path'      :str(srcPath),
+            'cat'       :str(srcCat),
+            'subcat'    :str(srcSubCat),
+            'indexed'   :False
+            'verdate'   :'UNK',
+            'lastidx'   :'UNK',
+            'qltyscore' :0,
+            'indexscore':0,
+            'xrefscore' :0,
+            'ngrams'    :[] }
+        docMetaStore.sync()
+
     # Flush Anagram Line/paragrph data
-    if docStat.has_key(srcID):
-        del docStat[srcID]
+    if not docStat.has_key(srcID):
+        #del docStat[srcID]
+        docStat[srcID] = {}
         docStat.sync()
 
     return
@@ -123,33 +131,56 @@ def ngram_store_add(ngramStore, ngram, srcID):
     # initialize item if not already in the master dictionory
     if not ngramStore.has_key(ngram):
         ngramStore[ngram] = [srcID]
+        if trace: print('CREATE: ngramStore[ngram]:', srcID, ngram, ngramStore[ngram][-10:])
     elif srcID not in ngramStore[ngram]:
         # if File isn't recorded as a viable match, then add to list
         ngramStore[ngram].append(srcID)
-    if trace: print('ngramStore[ngram]:', srcID, ngram, ngramStore[ngram][-10:])
+        if trace: print('ADD: ngramStore[ngram]:', srcID, ngram, ngramStore[ngram][-10:])
     return
-    
+
 # Record Source includes ngram, and what lines/paragraphs inc ngram
 def src_ngram_add(docMetaStore, docStat, ngram, lineID, srcID):
     ngram = str(ngram)
     srcID = str(srcID)
     #lineID = str(lineID)
-    
-    # Add ngram's existence into Meta Storage 
+
+    # Add ngram's existence into Meta Storage
     if docMetaStore[srcID]['ngrams'] == []:
-         docMetaStore[srcID]['ngrams'] = [ngram]
+        docMetaStore[srcID]['ngrams'] = [ngram]
+        if trace: print('CREATE: docMetaStore[srcID][ngrams]:', srcID, ngram, docMetaStore[srcID]['ngrams'][-10:])
     elif ngram not in docMetaStore[srcID]['ngrams']:
-        if trace: print('docMetaStore[srcID][ngrams]:', srcID, ngram, docMetaStore[srcID]['ngrams'][-10:])
         docMetaStore[srcID]['ngrams'].append(ngram)
-    
+        if trace: print('ADD: docMetaStore[srcID][ngrams]:', srcID, ngram, docMetaStore[srcID]['ngrams'][-10:])
+
     # Add/initialize ngram and line(s) info Source Statistics
     if not docStat.has_key(srcID):
         docStat[srcID] = { ngram :[lineID] }
-    # if ngram hasn't been initialized
+        if trace: print('CREATE: docStat[srcID][ngram]:', srcID, ngram, docStat[srcID][ngram][-10:])
     elif ngram not in docStat[srcID]:
+        # if ngram hasn't been initialized
         docStat[srcID][ngram] = [lineID]
+        if trace: print('CREATE: docStat[srcID][ngram]:', srcID, ngram, docStat[srcID][ngram][-10:])
     elif lineID not in docStat[srcID][ngram]:
         # if line isn't recorded as a viable match, then add to list
-        if trace: print('docStat[srcID][ngram]:', srcID, ngram, docStat[srcID][ngram][-10:])
         docStat[srcID][ngram].append(lineID)
+        if trace: print('ADD: docStat[srcID][ngram]:', srcID, ngram, docStat[srcID][ngram][-10:])
     return
+
+# Close/Cleanup datastores
+def close_datastores(configStore, ngramStore, docMetaStore, docStat):
+    configStore.sync()
+    configStore.close()
+
+    ngramStore.sync()
+    ngramStore.close()
+
+    docMetaStore.sync()
+    docMetaStore.close()
+
+    docStat.sync()
+    docStat.close()
+    return
+
+# Build ngram list from given word list
+def build_ngrams(input_list, n):
+  return zip(*[input_list[i:] for i in range(n)])

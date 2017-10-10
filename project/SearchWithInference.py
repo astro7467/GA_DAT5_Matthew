@@ -23,7 +23,7 @@
 """
     Current design is a simple minimum DB design
     *** will not scale - proof of concept only ***
-    for full multi doc indexing, would need to breakdown datastores 
+    for full multi doc indexing, would need to breakdown datastores
     to faciliate concurrency, and different document types and meta data needs.
 """
 
@@ -33,23 +33,23 @@ import os
 
 from sklearn.feature_extraction.text import CountVectorizer #, TfidfVectorizer
 
-trace = True
+trace = True # Print out extra info as we go
+dataSpecVer = 0.1 # Min data spec version expected & used
 
-def main():
+def index():
     configStore, ngramStore, docMetaStore, docStat, src2uuid = swi.open_datastores()
-    
-    uuidInstance, corpusDir, ngramWidth = swi.sys_config(configStore)
-    
+    uuidInstance, corpusDir, ngramWidth, StoreDataVersion = swi.sys_config(configStore)
+
     srcCat = 'FILE'
     srcSubCat = 'TXT'
     path = os.path.join(corpusDir, '*.txt')
     files = glob.glob(path)
-    if trace: print('Files:', files[:-10])
-    
-    #Generate Vectorization of ngrams and strip stop words 
+    if trace: print('PROCESS: Files:', files[:-10])
+
+    #Generate Vectorization of ngrams and strip stop words
     vectorizer = CountVectorizer(ngram_range=(1, ngramWidth), stop_words='english')
     ngramAnalyzer = vectorizer.build_analyzer()
-    
+
     # for each file, get a UID and parse
     for fileName in files:
         # Build a individual File Breakdown dictionary
@@ -57,41 +57,69 @@ def main():
         #print srcID, fileName
         swi.init_source(docMetaStore, docStat, srcID, fileName, srcCat, srcSubCat)
 
-        if trace: print('SrcID, Filename, SrcCat, SrcSubCat:', srcID, fileName, srcCat, srcSubCat)
-        
-        with open( fileName, mode = 'rU' ) as currFile:
-            # for each line get a UID and parse line
-            for lineID, line in enumerate(currFile):
-                if trace: print('LineID, line:', lineID, line)
-                
-                #print lineID, swi.normalize_text(line)
-    
-                # store the lines vectorization for later analysis
-                lineNgrams = ngramAnalyzer( swi.normalize_text(line) )
-                #print lineID, lineNgrams
-                            
-                # For each word/ngram add to master dictionary with FileID & In FileDict
-                for item in lineNgrams:
-                    # First Record Ngram is in File, then record which lines have the Ngram
-                    swi.ngram_store_add(ngramStore, item, srcID)
-                    swi.src_ngram_add(docMetaStore, docStat, item, lineID, srcID)
-                    
+        if trace: print('PROCESS: SrcID, Filename, SrcCat, SrcSubCat:', srcID, fileName, srcCat, srcSubCat)
+        if note docMetaStore[srcID]['indexed']:
+            with open( fileName, mode = 'rU' ) as currFile:
+                # for each line get a UID and parse line
+                for lineID, line in enumerate(currFile):
+                    if trace: print('PROCESS: LineID, line:', lineID, line[:-128])
+
+                    #print lineID, swi.normalize_text(line)
+
+                    # store the lines vectorization for later analysis
+                    lineNgrams = ngramAnalyzer( swi.normalize_text(line) )
+                    #print lineID, lineNgrams
+
+                    # For each word/ngram add to master dictionary with FileID & In FileDict
+                    for item in lineNgrams:
+                        # First Record Ngram is in File, then record which lines have the Ngram
+                        swi.ngram_store_add(ngramStore, item, srcID)
+                        swi.src_ngram_add(docMetaStore, docStat, item, lineID, srcID)
+
+                    # rof
                 # rof
-            # rof
-        # htiw
-        ngramStore.sync()
-        docMetaStore.sync()
-        docStat.sync()
-
+            # htiw
+            docMetaStore[srcID]['indexed'] = True
+            ngramStore.sync()
+            docMetaStore.sync()
+            docStat.sync()
+        # fi
     # rof
+    close_datastores(configStore, ngramStore, docMetaStore, docStat)
+    return
 
- #   configStore.
-    configStore.close()
-    ngramStore.close()
-    docMetaStore.close()
-    docStat.close()
-    
+#Search for string in index
+def search(argv):
+    configStore, ngramStore, docMetaStore, docStat, src2uuid = swi.open_datastores()
+    uuidInstance, corpusDir, ngramWidth = swi.sys_config(configStore)
+    words = argv.split()
+    calcngrams = build_ngrams(words, ngramWidth)
+
+    if trace:
+        print('INFO: Text', argv)
+        print('INFO: ngrams', calcngrams)
+
+    close_datastores(configStore, ngramStore, docMetaStore, docStat)
+    return
+
+# Parse commandline options
+def main(argv):
+    helpText = 'SearchWithInference.py <[-h|--help]|[-i|--index]|[-s|--search|--find] text>'
+   try:
+      opts, args = getopt.getopt(argv,"his:",["help","index","search="])
+   except getopt.GetoptError:
+      print helpText
+      print
+      sys.exit(2)
+   for opt, arg in opts:
+      if opt in ('-h', '--help'):
+         print helpText
+         sys.exit()
+     elif opt in ("-i", "--index"):
+         index
+     elif opt in ("-s", "--search", '--find'):
+         search(arg)
     return
 
 if __name__ == '__main__':
-    main()    
+    main(sys.argv[1:])
