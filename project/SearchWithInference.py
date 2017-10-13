@@ -28,55 +28,80 @@
 """
 
 import swi_lib as swi
+import getopt
 import glob
 import os
+import sys
 
 from sklearn.feature_extraction.text import CountVectorizer #, TfidfVectorizer
 
 trace = True # Print out extra info as we go
 dataSpecVer = 0.1 # Min data spec version expected & used
 
-def index():
+def index_files():
     configStore, ngramStore, docMetaStore, docStat, src2uuid = swi.open_datastores()
     uuidInstance, corpusDir, ngramWidth, StoreDataVersion = swi.sys_config(configStore)
 
+    if trace: print('PROCESS: uuidInstance, corpusDir, ngramWidth, StoreDataVersion:', uuidInstance, corpusDir, ngramWidth, StoreDataVersion)
+
     srcCat = 'FILE'
     srcSubCat = 'TXT'
-    path = os.path.join(corpusDir, '*.txt')
-    files = glob.glob(path)
-    if trace: print('PROCESS: Files:', files[:-10])
+
+    #path = os.path.join(corpusDir, '*.txt')
+    #foundfiles = glob.glob(path)
+    foundFiles = []
+    for root, dirs, files in os.walk(corpusDir):
+        for file in files:
+            if file.endswith(".txt"):
+                 foundFiles.append(os.path.join(root, file))
+            # fi
+        # rof
+    # rof
+
+    if trace: print('PROCESS: Files:', foundFiles[:-10])
 
     #Generate Vectorization of ngrams and strip stop words
     vectorizer = CountVectorizer(ngram_range=(1, ngramWidth), stop_words='english')
     ngramAnalyzer = vectorizer.build_analyzer()
 
     # for each file, get a UID and parse
-    for fileName in files:
+    for fileName in foundFiles:
         # Build a individual File Breakdown dictionary
         srcID = swi.uuid_source( src2uuid, '' + srcCat + ':' + srcSubCat + ':' + fileName + '', uuidInstance)
-        #print srcID, fileName
         swi.init_source(docMetaStore, docStat, srcID, fileName, srcCat, srcSubCat)
 
         if trace: print('PROCESS: SrcID, Filename, SrcCat, SrcSubCat:', srcID, fileName, srcCat, srcSubCat)
-        if note docMetaStore[srcID]['indexed']:
+
+        if not docMetaStore[srcID]['indexed']:
+            lineID = 0
             with open( fileName, mode = 'rU' ) as currFile:
+                lineNgrams = ngramAnalyzer( swi.normalize_text(fileName) )
+
+                if trace: print('PROCESS: LineID, fileName:', lineID, swi.normalize_text(fileName))
+
+                # For each word/ngram add to master dictionary with FileID & In FileDict
+                for item in lineNgrams:
+                    # First Record Ngram is in File, then record which lines have the Ngram
+                    swi.ngram_store_add(ngramStore, item, srcID)
+                    swi.src_ngram_add(docMetaStore, docStat, item, 0, srcID)
+                # rof
+
                 # for each line get a UID and parse line
-                for lineID, line in enumerate(currFile):
-                    if trace: print('PROCESS: LineID, line:', lineID, line[:-128])
+                for lineID, line in enumerate(currFile, 1):
+                    normalizedText = swi.normalize_text(line)
+                    if not normalizedText in [None, '', ' ']:
+                        if trace: print('PROCESS: LineID, normalizedText:', lineID, normalizedText)
 
-                    #print lineID, swi.normalize_text(line)
+                        # store the lines vectorization for later analysis
+                        lineNgrams = ngramAnalyzer( normalizedText )
 
-                    # store the lines vectorization for later analysis
-                    lineNgrams = ngramAnalyzer( swi.normalize_text(line) )
-                    #print lineID, lineNgrams
-
-                    # For each word/ngram add to master dictionary with FileID & In FileDict
-                    for item in lineNgrams:
-                        # First Record Ngram is in File, then record which lines have the Ngram
-                        swi.ngram_store_add(ngramStore, item, srcID)
-                        swi.src_ngram_add(docMetaStore, docStat, item, lineID, srcID)
-
-                    # rof
+                        # For each word/ngram add to master dictionary with FileID & In FileDict
+                        for item in lineNgrams:
+                            # First Record Ngram is in File, then record which lines have the Ngram
+                            swi.ngram_store_add(ngramStore, item, srcID)
+                            swi.src_ngram_add(docMetaStore, docStat, item, lineID, srcID)
+                        # rof
+                    # fi
                 # rof
             # htiw
             docMetaStore[srcID]['indexed'] = True
@@ -85,41 +110,63 @@ def index():
             docStat.sync()
         # fi
     # rof
-    close_datastores(configStore, ngramStore, docMetaStore, docStat)
+    swi.close_datastores(configStore, ngramStore, docMetaStore, docStat)
     return
+# fed
 
 #Search for string in index
-def search(argv):
+def search(searchText):
     configStore, ngramStore, docMetaStore, docStat, src2uuid = swi.open_datastores()
-    uuidInstance, corpusDir, ngramWidth = swi.sys_config(configStore)
-    words = argv.split()
-    calcngrams = build_ngrams(words, ngramWidth)
+    uuidInstance, corpusDir, ngramWidth, StoreDataVersion = swi.sys_config(configStore)
+
+    searchText = swi.normalize_text(searchText)
+    words = searchText.split()
+    calcNgrams = swi.build_ngrams(words, ngramWidth)
 
     if trace:
-        print('INFO: Text', argv)
-        print('INFO: ngrams', calcngrams)
+        print('INFO: Text         :', searchText)
+        print('INFO: Width, ngrams:', ngramWidth, calcNgrams)
+    # fi
 
-    close_datastores(configStore, ngramStore, docMetaStore, docStat)
+    topSrcMatches = swi.calc_matches(ngramStore, calcNgrams, 10)
+
+    swi.close_datastores(configStore, ngramStore, docMetaStore, docStat)
     return
+# fed
 
 # Parse commandline options
 def main(argv):
-    helpText = 'SearchWithInference.py <[-h|--help]|[-i|--index]|[-s|--search|--find] text>'
-   try:
-      opts, args = getopt.getopt(argv,"his:",["help","index","search="])
-   except getopt.GetoptError:
-      print helpText
-      print
-      sys.exit(2)
-   for opt, arg in opts:
-      if opt in ('-h', '--help'):
-         print helpText
-         sys.exit()
-     elif opt in ("-i", "--index"):
-         index
-     elif opt in ("-s", "--search", '--find'):
-         search(arg)
+    helpText = 'USAGE: SearchWithInference.py <[-h|--help]|[-i|--index]|[-s|--search|--find] text>'
+
+    if len(argv) == 0:
+        print helpText
+        sys.exit(2)
+    # fi
+
+    try:
+        opts, args = getopt.getopt(argv,"his:",["help","index","search="])
+    except getopt.GetoptError:
+        print helpText
+        print
+        sys.exit(2)
+    # yrt
+
+    for opt, arg in opts:
+        if opt in ('-h', '--help'):
+            if trace: print('INFO: Arg - Help')
+            print helpText
+            sys.exit()
+        elif opt in ("-i", "--index"):
+            if trace: print('INFO: Arg - Index')
+            index_files()
+        elif opt in ("-s", "--search", '--find'):
+            if trace: print('INFO: Arg - Search')
+            search(arg)
+        # fi
+    # rof
     return
+# fed
 
 if __name__ == '__main__':
     main(sys.argv[1:])
+# fi
