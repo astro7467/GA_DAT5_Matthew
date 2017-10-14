@@ -27,6 +27,18 @@
     to faciliate concurrency, and different document types and meta data needs.
 """
 
+"""
+TODOS / Full Product Considerations:
+- Leverage Classes for all DB/Data Model Interations
+- Seperate W/R DB activity (eg index) from RO DB activity (search)
+- Search History (Learning/ngram considerations)
+- Explore ngram vectorizations
+- Split each ngram width into separate tables - better manage & scale ngram changes
+- Consider 1st Pass index (Fast - monogram) vs background index (bigram -> Ngram)
+- line/cell/tag/paragraph weights or tags eg. <h1> > <h2>, 'word': 'definition' weighing
+- Seperate DB backend from code (i.e. shelve/cpickle vs sqlite/mySQL/Marina/PostgresSQL)
+"""
+
 import swi_lib as swi
 import getopt
 import glob
@@ -37,6 +49,31 @@ from sklearn.feature_extraction.text import CountVectorizer #, TfidfVectorizer
 
 trace = True # Print out extra info as we go
 dataSpecVer = 0.1 # Min data spec version expected & used
+
+#Search for string in index
+def search(searchText):
+    configStore, ngramStore, docMetaStore, docStat, src2uuid = swi.open_datastores()
+    uuidInstance, corpusDir, ngramWidth, StoreDataVersion = swi.sys_config(configStore)
+
+    searchText = swi.normalize_text(searchText)
+    words = searchText.split()
+    calcNgrams = swi.build_ngrams(words, ngramWidth)
+
+    if trace:
+        print('INFO: Text         :', searchText)
+        print('INFO: Width, ngrams:', ngramWidth, calcNgrams)
+    #fi
+
+    topSrcMatches = swi.calc_matches(ngramStore, calcNgrams, 10)
+
+    print 'topSrcMatches:'
+    for index in range(0, len(topSrcMatches)):
+        srcID = topSrcMatches[index]
+        print index+1, ':', srcID, docMetaStore[srcID]['cat'],docMetaStore[srcID]['subcat'],  docMetaStore[srcID]['path']
+    #rof
+    swi.close_datastores(configStore, ngramStore, docMetaStore, docStat)
+    return
+#fed
 
 def index_files():
     configStore, ngramStore, docMetaStore, docStat, src2uuid = swi.open_datastores()
@@ -54,13 +91,13 @@ def index_files():
         for file in files:
             if file.endswith(".txt"):
                  foundFiles.append(os.path.join(root, file))
-            # fi
-        # rof
-    # rof
+            #fi
+        #rof
+    #rof
 
     if trace: print('PROCESS: Files:', foundFiles[:-10])
 
-    #Generate Vectorization of ngrams and strip stop words
+    # Generate Vectorization of ngrams and strip stop words
     vectorizer = CountVectorizer(ngram_range=(1, ngramWidth), stop_words='english')
     ngramAnalyzer = vectorizer.build_analyzer()
 
@@ -81,10 +118,10 @@ def index_files():
 
                 # For each word/ngram add to master dictionary with FileID & In FileDict
                 for item in lineNgrams:
-                    # First Record Ngram is in File, then record which lines have the Ngram
+                    #first Record Ngram is in File, then record which lines have the Ngram
                     swi.ngram_store_add(ngramStore, item, srcID)
                     swi.src_ngram_add(docMetaStore, docStat, item, 0, srcID)
-                # rof
+                #rof
 
                 # for each line get a UID and parse line
                 for lineID, line in enumerate(currFile, 1):
@@ -97,42 +134,22 @@ def index_files():
 
                         # For each word/ngram add to master dictionary with FileID & In FileDict
                         for item in lineNgrams:
-                            # First Record Ngram is in File, then record which lines have the Ngram
+                            #first Record Ngram is in File, then record which lines have the Ngram
                             swi.ngram_store_add(ngramStore, item, srcID)
                             swi.src_ngram_add(docMetaStore, docStat, item, lineID, srcID)
-                        # rof
-                    # fi
-                # rof
-            # htiw
+                        #rof
+                    #fi
+                #rof
+            #htiw
             docMetaStore[srcID]['indexed'] = True
             ngramStore.sync()
             docMetaStore.sync()
             docStat.sync()
-        # fi
-    # rof
+        #fi
+    #rof
     swi.close_datastores(configStore, ngramStore, docMetaStore, docStat)
     return
-# fed
-
-#Search for string in index
-def search(searchText):
-    configStore, ngramStore, docMetaStore, docStat, src2uuid = swi.open_datastores()
-    uuidInstance, corpusDir, ngramWidth, StoreDataVersion = swi.sys_config(configStore)
-
-    searchText = swi.normalize_text(searchText)
-    words = searchText.split()
-    calcNgrams = swi.build_ngrams(words, ngramWidth)
-
-    if trace:
-        print('INFO: Text         :', searchText)
-        print('INFO: Width, ngrams:', ngramWidth, calcNgrams)
-    # fi
-
-    topSrcMatches = swi.calc_matches(ngramStore, calcNgrams, 10)
-
-    swi.close_datastores(configStore, ngramStore, docMetaStore, docStat)
-    return
-# fed
+#fed
 
 # Parse commandline options
 def main(argv):
@@ -141,7 +158,7 @@ def main(argv):
     if len(argv) == 0:
         print helpText
         sys.exit(2)
-    # fi
+    #fi
 
     try:
         opts, args = getopt.getopt(argv,"his:",["help","index","search="])
@@ -149,7 +166,7 @@ def main(argv):
         print helpText
         print
         sys.exit(2)
-    # yrt
+    #yrt
 
     for opt, arg in opts:
         if opt in ('-h', '--help'):
@@ -162,11 +179,11 @@ def main(argv):
         elif opt in ("-s", "--search", '--find'):
             if trace: print('INFO: Arg - Search')
             search(arg)
-        # fi
-    # rof
+        #fi
+    #rof
     return
-# fed
+#fed
 
 if __name__ == '__main__':
     main(sys.argv[1:])
-# fi
+#fi

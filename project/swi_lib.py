@@ -20,12 +20,92 @@
 
 """
 import itertools
+import math
 import re
 import shelve
 import uuid
 
-_trace = False # enable increased data reporting
+_trace = True # enable increased data reporting
 _docMetaStore_ngrams = True # Storage of ngram list in docMetaStore per srcID
+
+#find N best matches of given Ngrams vs Ngram Index
+def calc_matches(ngramStore, ngramList, n=12):
+    srcNgramCounts = {} # Store Raw per SrcID, by ngram counts
+    ngramCounts = {}    # Per ngram how many unique (srcID) counts
+    ngramWeights = {}   # Weight of each ngram in calcing srcID's value
+    srcWeightedScore = {}   # Weight of each ngram in calcing srcID's value
+    ngramWeightBase = 0.0 # Count we will base weight on (i.e. total ngram matches)
+    srcNgramScore = {}  # Weighted score of match for each srcID
+
+    # Parse ngramList for unseen ngrams and remove
+    for ngram in ngramList[:]:
+        if not ngramStore.has_key(ngram):
+            ngramList.remove(ngram)
+        #fi
+    #rof
+
+    # take verified ngram list and build counts
+    for ngram in ngramList:
+        # cycle thru srcID with ngram, adding to srcNgramCounts & ngramCounts
+        for srcID in ngramStore[ngram].keys():
+            if not srcNgramCounts.has_key(srcID):
+                # Create and add src's count of ngram
+                srcNgramCounts[srcID] = { ngram:ngramStore[ngram][srcID] }
+            else:
+                # increment ngram count for src (in theory, this should never happen)
+                if not srcNgramCounts[srcID].has_key(ngram):
+                    # Create and add src's ngram count of ngram
+                    srcNgramCounts[srcID][ngram] = ngramStore[ngram][srcID]
+                else:
+                    # increment ngram count for src (in theory, this should never happen)
+                    srcNgramCounts[srcID][ngram] += ngramStore[ngram][srcID]
+                #fi
+            #fi
+
+            # Record total ngram appearances so we can use as weight later
+            if not ngramCounts.has_key(ngram):
+                # Create and add src's count of ngram
+                ngramCounts[ngram] = ngramStore[ngram][srcID]
+            else:
+                # Increment Total instances of ngram's occurance
+                ngramCounts[ngram] += ngramStore[ngram][srcID]
+            #fi
+            ngramWeightBase += ngramStore[ngram][srcID]
+        #rof
+        if _trace: print('UPDATE: ngramWeightBase, ngramStore[ngram]:', ngramWeightBase, ngram, ngramStore[ngram])
+    #rof
+
+    # Assign a weight to each based on 'uniquiness'
+    for ngram, ngramCount in sorted(ngramCounts.iteritems(), reverse=True, key=lambda (k,v): (v,k)):
+        ngramWeight = math.log(ngramWeightBase, ngramCount) * len(ngram.split())
+        ngramWeights[ngram] = ngramWeight
+        if _trace: print "INFO: ngramWeight, count, ngram", ngramWeight, ngramCount, ngram
+    #rof
+
+    for srcID in srcNgramCounts:
+        for ngram in srcNgramCounts[srcID]:
+            WeightedScore = ngramWeights[ngram] * srcNgramCounts[srcID][ngram] * len(ngram.split())
+            if not srcWeightedScore.has_key(srcID):
+                srcWeightedScore[srcID] = WeightedScore
+            else:
+                srcWeightedScore[srcID] += WeightedScore
+            #fi
+        #rof
+        if _trace: print "INFO: srcWeightedScore[srcID]", srcID, srcWeightedScore[srcID]
+    #rof
+
+    if _trace: print "INFO: srcWeightedScore", srcWeightedScore
+
+    topSrcMatches = []
+    for srcID, WeightedScore in sorted(srcWeightedScore.iteritems(), reverse=True, key=lambda (k,v): (v,k)):
+        topSrcMatches.append(srcID)
+        if _trace: print "INFO: topSrcMatches, WeightedScore, srcID", WeightedScore, srcID
+    #rof
+
+    if _trace: print "INFO: topSrcMatches", topSrcMatches
+
+    return topSrcMatches
+#fed
 
 # Normalize Text Convert text to lower-case and strip punctuation/symbols from words
 def normalize_text(text):
@@ -35,7 +115,7 @@ def normalize_text(text):
     # Replace non-AlphaNumeric with Space
     norm_text = re.sub(r'[^\w]+', ' ', norm_text)
     return re.sub('[ \t\n\r]+', ' ', norm_text).strip(' \t\n\r')
-# fed
+#fed
 
 ### Open Datastores and return handles
 # TODO: Serperate W/R opens from RO opens
@@ -52,11 +132,11 @@ def open_datastores():
     # Document Stats (file ngrams) Datastore
     rootDocStat = shelve.open('data/docstat.db', writeback=True)
 
-    # File Type/Path to UUID Datastore
+    #file Type/Path to UUID Datastore
     rootSources = shelve.open('data/sources.db', writeback=True)
 
     return rootConfig, rootNgram, rootDocMeta, rootDocStat, rootSources
-# fed
+#fed
 
 # UUID Management
 def sys_config(configStore):
@@ -66,33 +146,33 @@ def sys_config(configStore):
     except:
         configStore['uuid'] = str(uuid.uuid1())
         uuidInstance = configStore['uuid']
-    # yrt
+    #yrt
 
     try:
         corpusDir = configStore['corpus']
     except:
         configStore['corpus'] = './corpus'
         corpusDir = configStore['corpus']
-    # yrt
+    #yrt
 
     try:
         ngramWidth = configStore['ngram']
     except:
         configStore['ngram'] = 3
         ngramWidth = configStore['ngram']
-    # yrt
+    #yrt
 
     try:
         StoreDataVersion = configStore['version']
     except:
         configStore['version'] = 0.1
         StoreDataVersion = configStore['version']
-    # yrt
+    #yrt
 
     configStore.sync()
 
     return uuidInstance, corpusDir, ngramWidth, StoreDataVersion
-# fed
+#fed
 
 # Match or Create a UUID for data sources
 def uuid_source(rootSources, srcPath, Instance):
@@ -101,10 +181,10 @@ def uuid_source(rootSources, srcPath, Instance):
     except:
         rootSources[srcPath] = str(uuid.uuid5(uuid.UUID(Instance), srcPath))
         srcUUID = rootSources[srcPath]
-    # yrt
+    #yrt
     rootSources.sync()
     return str(srcUUID)
-# fed
+#fed
 
 # Initialize Src Records (i.e. Delete for now)
 def init_source(docMetaStore, docStat, srcID, srcPath, srcCat = 'UNK', srcSubCat = 'UNK'):
@@ -125,16 +205,16 @@ def init_source(docMetaStore, docStat, srcID, srcPath, srcCat = 'UNK', srcSubCat
             'xrefscore' :0,
             'ngrams'    :[] }
         docMetaStore.sync()
-    # fi
+    #fi
 
     # Flush Anagram Line/paragrph data
     if not docStat.has_key(srcID):
         #del docStat[srcID]
         docStat[srcID] = {}
         docStat.sync()
-    # fi
+    #fi
     return
-# fed
+#fed
 
 # Record/Add Source with Ngram usage
 def ngram_store_add(ngramStore, ngram, srcID):
@@ -150,12 +230,12 @@ def ngram_store_add(ngramStore, ngram, srcID):
         ngramStore[ngram][srcID] += 1
         if _trace: print('CHANGE: ngramStore[ngram]:', srcID, ngram, ngramStore[ngram])
     else:
-        # File isn't recorded as a viable match, then add to list
+        #file isn't recorded as a viable match, then add to list
         ngramStore[ngram][srcID] = 1
         if _trace: print('ADD: ngramStore[ngram]:', srcID, ngram, ngramStore[ngram])
-    # fi
+    #fi
     return
-# fed
+#fed
 
 # Record Source includes ngram, and what lines/paragraphs inc ngram
 def src_ngram_add(docMetaStore, docStat, ngram, lineID, srcID):
@@ -171,8 +251,8 @@ def src_ngram_add(docMetaStore, docStat, ngram, lineID, srcID):
         elif ngram not in docMetaStore[srcID]['ngrams']:
             docMetaStore[srcID]['ngrams'].append(ngram)
             if _trace: print('ADD: docMetaStore[srcID][ngrams]:', srcID, ngram, docMetaStore[srcID]['ngrams'][-10:])
-        # fi
-    # fi
+        #fi
+    #fi
 
     # Add/initialize ngram and line(s) info Source Statistics
     if not docStat.has_key(srcID):
@@ -186,9 +266,9 @@ def src_ngram_add(docMetaStore, docStat, ngram, lineID, srcID):
         # if line isn't recorded as a viable match, then add to list
         docStat[srcID][ngram].append(lineID)
         if _trace: print('ADD: docStat[srcID][ngram]:', srcID, ngram, docStat[srcID][ngram][-10:])
-    # fi
+    #fi
     return
-# fed
+#fed
 
 # Close/Cleanup datastores
 def close_datastores(configStore, ngramStore, docMetaStore, docStat):
@@ -204,17 +284,17 @@ def close_datastores(configStore, ngramStore, docMetaStore, docStat):
     docStat.sync()
     docStat.close()
     return
-# fed
+#fed
 
 def tuples2text(tuple):
     text = ''
     for item in tuple:
         if not item in [None, '', ' ',]:
             text += " " + item
-        # fi
-    # rof
+        #fi
+    #rof
     return re.sub('[ \t\n\r]+', ' ', text).strip(' \t\n\r')
-# fed
+#fed
 
 # Build ngram list from given word list
 # Used for search string - assume users write sentences or keywords
@@ -225,28 +305,6 @@ def build_ngrams(inputList, n=2):
         for tuple in itertools.combinations(inputList, L):
             outputList.append(tuples2text(tuple))
         #rof
-    # rof
+    #rof
     return [item for item in outputList if item != '']
-# fed
-
-# Find N best matches of given Ngrams vs Ngram Index
-def calc_matches(ngramStore, ngramList, n=12):
-    srcNgramCounts = {} # Store Raw per SrcID, by ngram counts
-    ngramCounts = {}    # Per ngram how many unique (srcID) counts
-    ngramWeights = {}   # Weight of each ngram in calcing srcID's value
-    srcNgramScore = {}  # Weighted score of match for each srcID
-
-    for ngram in ngramList:
-        if not ngramStore.has_key(ngram):
-            # If ngram is unique/unavailable in db
-            ngramCounts[ngram] = 0
-            if _trace: print('NOT FOUND: ngram not indexed:', ngram, 0)
-        else:
-            # cycle thru srcID with ngram, adding to srcNgramCounts & ngramCounts
-            for srcID in ngramStore[ngram].keys():
-                
-            if _trace: print('ADD: ngramStore[ngram]:', srcID, ngram, ngramStore[ngram])
-        # fi
-    # rof
-    return
-# fed
+#fed
