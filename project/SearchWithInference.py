@@ -57,26 +57,24 @@ def search(searchText):
     dbStores = swi.open_datastores()
     sysConfig = swi.sys_config(dbStores)
 
-    searchText = swi.normalize_text(searchText)
-    words = searchText.split()
+    searchText = swi.normalise_text(searchText)
+    words = sorted(list(set(searchText.split())))
     ngramList = swi.build_ngrams(words, sysConfig['ngram'])
 
-    swi.trace_log( _logSysLevel, _logInfo, {'searchText': searchText})
-    swi.trace_log( _logSysLevel, _logConfig, {'ngramWidth': sysConfig['ngram']})
-    swi.trace_log( _logSysLevel, _logInfo, {'ngramList': ngramList})
+    swi.trace_log( _logSysLevel, _logConfig, sysConfig, context='sysConfig')
+    swi.trace_log( _logSysLevel, _logInfo, words, context='Search Words')
+    swi.trace_log( _logSysLevel, _logInfo, ngramList, context='ngramList')
 
     topSrcMatches, topSrcInfo, unseenNgrams = swi.calc_matches(dbStores, ngramList, 10)
 
     print 'topSrcMatches:'
     for index in range(0, len(topSrcMatches)):
         srcID = topSrcMatches[index]
-        print str(index+1).rjust(4), ':', dbStores['docmeta'][srcID]['cat'], dbStores['docmeta'][srcID]['subcat'], str(srcID), str(topSrcInfo[srcID]['score']).rjust(14), str(topSrcInfo[srcID]['ngrams']).rjust(4), dbStores['docmeta'][srcID]['path']
+        print str(index+1).rjust(4), ':', dbStores['docmeta'][srcID]['cat'], dbStores['docmeta'][srcID]['subcat'], str(srcID), str(topSrcInfo[srcID]['score']).ljust(16), str(topSrcInfo[srcID]['ngrams']).rjust(4), dbStores['docmeta'][srcID]['path']
     #rof
 
-    swi.trace_log( _logSysLevel, _logStatus, "ngrams used:")
-    swi.trace_log( _logSysLevel, _logStatus, sorted(ngramList))
-    swi.trace_log( _logSysLevel, _logStatus, "ngrams not indexed:")
-    swi.trace_log( _logSysLevel, _logStatus, sorted(unseenNgrams))
+    swi.trace_log( _logSysLevel, _logStatus, sorted(ngramList), context='ngrams used')
+    swi.trace_log( _logSysLevel, _logStatus, sorted(unseenNgrams), context='ngrams not used')
 
     swi.close_datastores(dbStores)
     return
@@ -86,7 +84,7 @@ def index_files():
     dbStores = swi.open_datastores()
     sysConfig = swi.sys_config(dbStores)
 
-    swi.trace_log( _logSysLevel, _logConfig, sysConfig)
+    swi.trace_log( _logSysLevel, _logConfig, sysConfig, context='sysConfig')
 
     # Index *.TXT files
     srcCat = 'FILE'
@@ -99,7 +97,7 @@ def index_files():
         #rof
     #rof
     swi.trace_log( _logSysLevel, _logInfo, 'Found '+str(len(fileList))+' '+srcCat+' of '+srcSubCat+' to scan')
-    swi.trace_log( _logSysLevel, _logTrace, ['Last 10 Files to scan'] + fileList[-10:])
+    swi.trace_log( _logSysLevel, _logTrace, fileList[-10:], context='Last 10 Files to scan')
     swi.index_file_txt(dbStores, sysConfig, fileList, srcCat, srcSubCat)
 
     # Index *.CSV files
@@ -113,7 +111,7 @@ def index_files():
         #rof
     #rof
     swi.trace_log( _logSysLevel, _logInfo, 'Found '+str(len(fileList))+' '+srcCat+' of '+srcSubCat+' to scan')
-    swi.trace_log( _logSysLevel, _logTrace, ['Last 10 Files to scan'] + fileList[-10:])
+    swi.trace_log( _logSysLevel, _logTrace, fileList[-10:], context='Last 10 Files to scan')
     swi.index_file_txt(dbStores, sysConfig, fileList, srcCat, srcSubCat)
 
     swi.close_datastores(dbStores)

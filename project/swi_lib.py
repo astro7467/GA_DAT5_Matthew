@@ -42,7 +42,7 @@ _logSysLevel = _logTrace
 #_logSysLevel = _logStatus
 
 # Common Logging/Trace Routine
-def trace_log(sysLogLevel, logType, logData):
+def trace_log(sysLogLevel, logType, logData, context=''):
     logTypes = ['ERROR', 'STATUS', 'CONFIG', 'INFO', 'TRACE']
 
     if logType < 0 : logType = 0
@@ -54,10 +54,15 @@ def trace_log(sysLogLevel, logType, logData):
     # #fi
 
     if logType <= sysLogLevel:
-        logText = time.strftime("%Y-%m-%d %H:%M:%S UTC%Z %a") + ' ' + logTypes[logType].ljust(8)
+        logText = time.strftime("%Y-%m-%d %H:%M:%S UTC%Z  ") + logTypes[logType].ljust(8)
+        if context <> '': logText += str(context) + '; '
+
         newLinePrefix = ' ' * len(logText)
+        # if context <> '': newLinePrefix += ' ' + context
+
         logTextList = []
         maxLineLen = 120
+
         if ( isinstance(logData, str) or isinstance(logData, int) or isinstance(logData, float) ):
             logTextList = [logText + str(logData).strip()]
         elif ( isinstance(logData, list) or isinstance(logData, tuple)):
@@ -140,10 +145,11 @@ def calc_matches(dbStores, ngramList, maxResults=12):
             #fi
             ngramWeightBase += dbStores['ngram'][ngram][srcID]
         #rof
-        trace_log( _logSysLevel, _logTrace, ['ngramWeightBase, dbStores[ngram][ngram]:', ngramWeightBase, ngram, dbStores['ngram'][ngram]])
     #rof
 
     # Assign a weight to each based on 'uniquiness'
+    normaliseBaseMax = 1
+    normaliseBaseMin = 0
     for ngram, ngramCount in sorted(ngramCounts.iteritems(), reverse=True, key=lambda (k,v): (v,k)):
         try:
             # More common ngrams get lower scores, longer ngrams get higher score
@@ -153,9 +159,22 @@ def calc_matches(dbStores, ngramList, maxResults=12):
         #yrt
         ngramWeight = ngramWeight * (float(ngramWeightBase) - float(ngramCount)) * float(len(ngram.split()))
         ngramWeights[ngram] = ngramWeight
-        trace_log( _logSysLevel, _logTrace, {'Routine': 'Weight', 'ngram': ngram, 'ngramWeight': ngramWeight, 'ngramCount': ngramCount, 'ngramWeightBase': ngramWeightBase})
+        normaliseBaseMax = max(ngramWeight, normaliseBaseMax)
+        normaliseBaseMin = min(ngramWeight, normaliseBaseMin)
     #rof
 
+    # Normalise ngramWeights
+    for ngram in ngramWeights.keys():
+        ngramWeights[ngram] /= (normaliseBaseMax - normaliseBaseMin)
+    #rof
+
+    trace_log( _logSysLevel, _logTrace, normaliseBaseMax, context='normaliseBaseMax')
+    trace_log( _logSysLevel, _logTrace, normaliseBaseMin, context='normaliseBaseMin')
+    trace_log( _logSysLevel, _logTrace, ngramWeights, context='ngramWeights')
+
+    # Score each srcID/doc based on ngram Weights
+    normaliseBaseMax = 1
+    normaliseBaseMin = 0
     for srcID in srcNgramCounts:
         for ngram in srcNgramCounts[srcID]:
             WeightedScore = ngramWeights[ngram] * srcNgramCounts[srcID][ngram] * len(ngram.split())
@@ -165,10 +184,18 @@ def calc_matches(dbStores, ngramList, maxResults=12):
                 srcWeightedScore[srcID] += WeightedScore
             #fi
         #rof
-        trace_log( _logSysLevel, _logInfo, ['srcWeightedScore[srcID]', srcID, srcWeightedScore[srcID]])
+        normaliseBaseMax = max(srcWeightedScore[srcID], normaliseBaseMax)
+        normaliseBaseMin = min(srcWeightedScore[srcID], normaliseBaseMin)
     #rof
 
-    trace_log( _logSysLevel, _logInfo, ['srcWeightedScore', srcWeightedScore])
+    # Normalise srcWeightedScore
+    for srcID in srcWeightedScore.keys():
+        srcWeightedScore[srcID] /= (normaliseBaseMax - normaliseBaseMin)
+    #rof
+
+    trace_log( _logSysLevel, _logTrace, normaliseBaseMax, context='normaliseBaseMax')
+    trace_log( _logSysLevel, _logTrace, normaliseBaseMin, context='normaliseBaseMin')
+    trace_log( _logSysLevel, _logInfo, srcWeightedScore, context='srcWeightedScore')
 
     topSrcMatches = []
     topSrcInfo = {}
@@ -176,16 +203,15 @@ def calc_matches(dbStores, ngramList, maxResults=12):
         topSrcMatches.append(srcID)
         topSrcInfo[srcID] = {'score': WeightedScore,
                              'ngrams': len(srcNgramCounts[srcID])}
-        trace_log( _logSysLevel, _logTrace, ['topSrcMatches, WeightedScore, srcID', WeightedScore, srcID])
     #rof
 
-    trace_log( _logSysLevel, _logInfo, ['topSrcMatches'] + topSrcMatches)
+    trace_log( _logSysLevel, _logInfo, topSrcMatches, context='topSrcMatches')
 
     return topSrcMatches[:maxResults], topSrcInfo, unseenNgrams
 #fed
 
 # Normalize Text Convert text to lower-case and strip punctuation/symbols from words
-def normalize_text(text):
+def normalise_text(text):
     norm_text = text.lower()
 
     # remove apostrophe in words: [alpha]'[alpha]=[alpha][alpha] eg. don't = dont
@@ -305,7 +331,7 @@ def ngram_store_add(dbStores, ngram, srcID):
     if not dbStores['ngram'].has_key(ngram):
         # initialize item if not already in the master dictionary
         dbStores['ngram'][ngram] = {srcID:1}
-        trace_log( _logSysLevel, _logInfo, ['dbStores[ngram][ngram]:', srcID, ngram, dbStores['ngram'][ngram]])
+        trace_log( _logSysLevel, _logInfo, ['Creating dbStores[ngram][ngram]:', srcID, ngram, dbStores['ngram'][ngram]])
     elif srcID in dbStores['ngram'][ngram]:
         # Count finds of ngram in srcID
         dbStores['ngram'][ngram][srcID] += 1
@@ -373,14 +399,14 @@ def tuples2text(tuple):
 # Build ngram list from given word list
 # Used for search string - assume users write sentences or keywords
 # cover all scenarios with comprehensive ngram
-def build_ngrams(inputList, n=2):
+def build_ngrams(inputList, width=2):
     outputList = []
-    for L in range(0, n + 1):
-        for tuple in itertools.combinations(inputList, L):
+    for length in range(1, width + 1):
+        for tuple in itertools.permutations(inputList, length):
             outputList.append(tuples2text(tuple))
         #rof
     #rof
-    return [item for item in outputList if item != '']
+    return sorted([item for item in outputList if item != ''])
 #fed
 
 # For each word/ngram add to master dictionary with FileID & In FileDict
@@ -409,15 +435,15 @@ def index_file_txt(dbStores, sysConfig, fileList, srcCat, srcSubCat):
         if not dbStores['docmeta'][srcID]['indexed']:
             lineID = 0
             with open( fileName, mode = 'rU' ) as currFile:
-                trace_log( _logSysLevel, _logTrace, ['LineID, fileName:', lineID, normalize_text(fileName)])
-                src_line_ngram_storage(dbStores, srcID, lineID, ngramAnalyzer(normalize_text(fileName)))
+                trace_log( _logSysLevel, _logTrace, ['LineID, fileName:', lineID, normalise_text(fileName)])
+                src_line_ngram_storage(dbStores, srcID, lineID, ngramAnalyzer(normalise_text(fileName)))
 
                 # for each line get a UID and parse line
                 for lineID, line in enumerate(currFile, 1):
-                    normalizedText = normalize_text(line)
-                    if not normalizedText in [None, '', ' ']:
-                        trace_log( _logSysLevel, _logTrace, ['LineID, normalizedText:', lineID, normalizedText])
-                        src_line_ngram_storage(dbStores, srcID, lineID, ngramAnalyzer(normalizedText))
+                    normalisedText = normalise_text(line)
+                    if not normalisedText in [None, '', ' ']:
+                        trace_log( _logSysLevel, _logTrace, ['LineID, normalisedText:', lineID, normalisedText])
+                        src_line_ngram_storage(dbStores, srcID, lineID, ngramAnalyzer(normalisedText))
                     #fi
                 #rof
             #htiw
