@@ -19,10 +19,15 @@
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 """
+
 import itertools
+import math
 import re
+import time
 import shelve
 import uuid
+
+from sklearn.feature_extraction.text import CountVectorizer #, TfidfVectorizer
 
 _trace = True # enable increased data reporting
 _storeDocMeta_ngrams = True # Storage of ngram list in dbStores['docmeta'] per srcID
@@ -33,14 +38,11 @@ _logStatus = 1
 _logConfig = 2
 _logInfo = 3
 _logTrace = 4
-_sysLogLevel = _logTrace
-#_sysLogLevel = _logStatus
+_logSysLevel = _logTrace
+#_logSysLevel = _logStatus
 
 # Common Logging/Trace Routine
 def trace_log(sysLogLevel, logType, logData):
-
-    import time
-
     logTypes = ['ERROR', 'STATUS', 'CONFIG', 'INFO', 'TRACE']
 
     if logType < 0 : logType = 0
@@ -93,21 +95,20 @@ def trace_log(sysLogLevel, logType, logData):
 #def
 
 #find N best matches of given Ngrams vs Ngram Index
-def calc_matches(dbStores, ngramList, n=12):
-
-    import math
-
-    srcNgramCounts = {} # Store Raw per SrcID, by ngram counts
-    ngramCounts = {}    # Per ngram how many unique (srcID) counts
-    ngramWeights = {}   # Weight of each ngram in calcing srcID's value
+def calc_matches(dbStores, ngramList, maxResults=12):
+    srcNgramCounts = {}     # Store Raw per SrcID, by ngram counts
+    ngramCounts = {}        # Per ngram how many unique (srcID) counts
+    ngramWeights = {}       # Weight of each ngram in calcing srcID's value
     srcWeightedScore = {}   # Weight of each ngram in calcing srcID's value
-    ngramWeightBase = 0.0 # Count we will base weight on (i.e. total ngram matches)
-    srcNgramScore = {}  # Weighted score of match for each srcID
+    ngramWeightBase = 0.0   # Count we will base weight on (i.e. total ngram matches)
+    srcNgramScore = {}      # Weighted score of match for each srcID
 
     # Parse ngramList for unseen ngrams and remove
+    unseenNgrams = []
     for ngram in ngramList[:]:
         if not dbStores['ngram'].has_key(ngram):
             ngramList.remove(ngram)
+            unseenNgrams += [ngram]
         #fi
     #rof
 
@@ -139,7 +140,7 @@ def calc_matches(dbStores, ngramList, n=12):
             #fi
             ngramWeightBase += dbStores['ngram'][ngram][srcID]
         #rof
-        trace_log( _sysLogLevel, _logTrace, ['ngramWeightBase, dbStores[ngram][ngram]:', ngramWeightBase, ngram, dbStores['ngram'][ngram]])
+        trace_log( _logSysLevel, _logTrace, ['ngramWeightBase, dbStores[ngram][ngram]:', ngramWeightBase, ngram, dbStores['ngram'][ngram]])
     #rof
 
     # Assign a weight to each based on 'uniquiness'
@@ -152,7 +153,7 @@ def calc_matches(dbStores, ngramList, n=12):
         #yrt
         ngramWeight = ngramWeight * (float(ngramWeightBase) - float(ngramCount)) * float(len(ngram.split()))
         ngramWeights[ngram] = ngramWeight
-        trace_log( _sysLogLevel, _logTrace, {'Routine': 'Weight', 'ngram': ngram, 'ngramWeight': ngramWeight, 'ngramCount': ngramCount, 'ngramWeightBase': ngramWeightBase})
+        trace_log( _logSysLevel, _logTrace, {'Routine': 'Weight', 'ngram': ngram, 'ngramWeight': ngramWeight, 'ngramCount': ngramCount, 'ngramWeightBase': ngramWeightBase})
     #rof
 
     for srcID in srcNgramCounts:
@@ -164,30 +165,37 @@ def calc_matches(dbStores, ngramList, n=12):
                 srcWeightedScore[srcID] += WeightedScore
             #fi
         #rof
-        trace_log( _sysLogLevel, _logInfo, ['srcWeightedScore[srcID]', srcID, srcWeightedScore[srcID]])
+        trace_log( _logSysLevel, _logInfo, ['srcWeightedScore[srcID]', srcID, srcWeightedScore[srcID]])
     #rof
 
-    trace_log( _sysLogLevel, _logInfo, ['srcWeightedScore', srcWeightedScore])
+    trace_log( _logSysLevel, _logInfo, ['srcWeightedScore', srcWeightedScore])
 
     topSrcMatches = []
+    topSrcInfo = {}
     for srcID, WeightedScore in sorted(srcWeightedScore.iteritems(), reverse=True, key=lambda (k,v): (v,k)):
         topSrcMatches.append(srcID)
-        trace_log( _sysLogLevel, _logTrace, ['topSrcMatches, WeightedScore, srcID', WeightedScore, srcID])
+        topSrcInfo[srcID] = {'score': WeightedScore,
+                             'ngrams': len(srcNgramCounts[srcID])}
+        trace_log( _logSysLevel, _logTrace, ['topSrcMatches, WeightedScore, srcID', WeightedScore, srcID])
     #rof
 
-    trace_log( _sysLogLevel, _logInfo, ['topSrcMatches'] + topSrcMatches)
+    trace_log( _logSysLevel, _logInfo, ['topSrcMatches'] + topSrcMatches)
 
-    return topSrcMatches
+    return topSrcMatches[:maxResults], topSrcInfo, unseenNgrams
 #fed
 
 # Normalize Text Convert text to lower-case and strip punctuation/symbols from words
 def normalize_text(text):
     norm_text = text.lower()
-    # Replace html breaks with newline
-    #norm_text = re.sub(r'<br *\/*>', '\n', norm_text)
-    # Replace non-AlphaNumeric with Space
-    norm_text = re.sub(r'[^\w]+', ' ', norm_text)
-    return re.sub('[ \t\n\r]+', ' ', norm_text).strip(' \t\n\r')
+
+    # remove apostrophe in words: [alpha]'[alpha]=[alpha][alpha] eg. don't = dont
+    norm_text = re.sub(r'([\w]+)\'([\w]+)', r'\1\2', norm_text)
+
+    # Replace non-AlphaNumeric sequences with Space
+    norm_text = re.sub(r'[^\w]+', r' ', norm_text)
+
+    # Replace spaces, underscores, tabs, newlines and returns with a space
+    return re.sub(r'[ _\t\n\r]+', r' ', norm_text).strip(' _\t\n\r')
 #fed
 
 ### Open Datastores and return handles
@@ -297,15 +305,15 @@ def ngram_store_add(dbStores, ngram, srcID):
     if not dbStores['ngram'].has_key(ngram):
         # initialize item if not already in the master dictionary
         dbStores['ngram'][ngram] = {srcID:1}
-        trace_log( _sysLogLevel, _logInfo, ['dbStores[ngram][ngram]:', srcID, ngram, dbStores['ngram'][ngram]])
+        trace_log( _logSysLevel, _logInfo, ['dbStores[ngram][ngram]:', srcID, ngram, dbStores['ngram'][ngram]])
     elif srcID in dbStores['ngram'][ngram]:
         # Count finds of ngram in srcID
         dbStores['ngram'][ngram][srcID] += 1
-        trace_log( _sysLogLevel, _logInfo, ['Changing dbStores[ngram][ngram]:', srcID, ngram, dbStores['ngram'][ngram]])
+        trace_log( _logSysLevel, _logInfo, ['Changing dbStores[ngram][ngram]:', srcID, ngram, dbStores['ngram'][ngram]])
     else:
         #file isn't recorded as a viable match, then add to list
         dbStores['ngram'][ngram][srcID] = 1
-        trace_log( _sysLogLevel, _logInfo, ['Adding dbStores[ngram][ngram]:', srcID, ngram, dbStores['ngram'][ngram]])
+        trace_log( _logSysLevel, _logInfo, ['Adding dbStores[ngram][ngram]:', srcID, ngram, dbStores['ngram'][ngram]])
     #fi
     return
 #fed
@@ -320,25 +328,25 @@ def src_ngram_add(dbStores, ngram, lineID, srcID):
         # Add ngram's existence into Meta Storage
         if dbStores['docmeta'][srcID]['ngrams'] == []:
             dbStores['docmeta'][srcID]['ngrams'] = [ngram]
-            trace_log( _sysLogLevel, _logInfo, ['Creating dbStores[docmeta][srcID][ngrams]:', srcID, ngram, dbStores['docmeta'][srcID]['ngrams'][-10:]])
+            trace_log( _logSysLevel, _logInfo, ['Creating dbStores[docmeta][srcID][ngrams]:', srcID, ngram, dbStores['docmeta'][srcID]['ngrams'][-10:]])
         elif ngram not in dbStores['docmeta'][srcID]['ngrams']:
             dbStores['docmeta'][srcID]['ngrams'].append(ngram)
-            trace_log( _sysLogLevel, _logInfo, ['Adding dbStores[docmeta][srcID][ngrams]:', srcID, ngram, dbStores['docmeta'][srcID]['ngrams'][-10:]])
+            trace_log( _logSysLevel, _logInfo, ['Adding dbStores[docmeta][srcID][ngrams]:', srcID, ngram, dbStores['docmeta'][srcID]['ngrams'][-10:]])
         #fi
     #fi
 
     # Add/initialize ngram and line(s) info Source Statistics
     if not dbStores['docstat'].has_key(srcID):
         dbStores['docstat'][srcID] = { ngram :[lineID] }
-        trace_log( _sysLogLevel, _logInfo, ['Creating dbStores[docstat][srcID][ngram]:', srcID, ngram, dbStores['docstat'][srcID][ngram][-10:]])
+        trace_log( _logSysLevel, _logInfo, ['Creating dbStores[docstat][srcID][ngram]:', srcID, ngram, dbStores['docstat'][srcID][ngram][-10:]])
     elif ngram not in dbStores['docstat'][srcID]:
         # if ngram hasn't been initialized
         dbStores['docstat'][srcID][ngram] = [lineID]
-        trace_log( _sysLogLevel, _logInfo, ['Creating dbStores[docstat][srcID][ngram]:', srcID, ngram, dbStores['docstat'][srcID][ngram][-10:]])
+        trace_log( _logSysLevel, _logInfo, ['Creating dbStores[docstat][srcID][ngram]:', srcID, ngram, dbStores['docstat'][srcID][ngram][-10:]])
     elif lineID not in dbStores['docstat'][srcID][ngram]:
         # if line isn't recorded as a viable match, then add to list
         dbStores['docstat'][srcID][ngram].append(lineID)
-        trace_log( _sysLogLevel, _logInfo, ['Adding dbStores[docstat][srcID][ngram]:', srcID, ngram, dbStores['docstat'][srcID][ngram][-10:]])
+        trace_log( _logSysLevel, _logInfo, ['Adding dbStores[docstat][srcID][ngram]:', srcID, ngram, dbStores['docstat'][srcID][ngram][-10:]])
     #fi
     return
 #fed
@@ -382,12 +390,10 @@ def src_line_ngram_storage(dbStores, srcID, lineID, lineNgrams):
         ngram_store_add(dbStores, item, srcID)
         src_ngram_add(dbStores, item, lineID, srcID)
     #rof
+#fed
 
 # Process given file as raw text line by line
 def index_file_txt(dbStores, sysConfig, fileList, srcCat, srcSubCat):
-
-    from sklearn.feature_extraction.text import CountVectorizer #, TfidfVectorizer
-
     # Generate Vectorization of ngrams and strip stop words
     vectorizer = CountVectorizer(ngram_range=(1, sysConfig['ngram']), stop_words='english')
     ngramAnalyzer = vectorizer.build_analyzer()
@@ -398,19 +404,19 @@ def index_file_txt(dbStores, sysConfig, fileList, srcCat, srcSubCat):
         srcID = uuid_source(dbStores, sysConfig, '' + srcCat + ':' + srcSubCat + ':' + fileName + '')
         init_source(dbStores, srcID, fileName, srcCat, srcSubCat)
 
-        trace_log( _sysLogLevel, _logTrace, ['SrcID, Filename, SrcCat, SrcSubCat:', srcID, fileName, srcCat, srcSubCat])
+        trace_log( _logSysLevel, _logTrace, ['SrcID, Filename, SrcCat, SrcSubCat:', srcID, fileName, srcCat, srcSubCat])
 
         if not dbStores['docmeta'][srcID]['indexed']:
             lineID = 0
             with open( fileName, mode = 'rU' ) as currFile:
-                trace_log( _sysLogLevel, _logTrace, ['LineID, fileName:', lineID, normalize_text(fileName)])
+                trace_log( _logSysLevel, _logTrace, ['LineID, fileName:', lineID, normalize_text(fileName)])
                 src_line_ngram_storage(dbStores, srcID, lineID, ngramAnalyzer(normalize_text(fileName)))
 
                 # for each line get a UID and parse line
                 for lineID, line in enumerate(currFile, 1):
                     normalizedText = normalize_text(line)
                     if not normalizedText in [None, '', ' ']:
-                        trace_log( _sysLogLevel, _logTrace, ['LineID, normalizedText:', lineID, normalizedText])
+                        trace_log( _logSysLevel, _logTrace, ['LineID, normalizedText:', lineID, normalizedText])
                         src_line_ngram_storage(dbStores, srcID, lineID, ngramAnalyzer(normalizedText))
                     #fi
                 #rof

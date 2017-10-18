@@ -48,7 +48,7 @@ _logStatus = 1
 _logConfig = 2
 _logInfo = 3
 _logTrace = 4
-_sysLogLevel = _logTrace
+_logSysLevel = _logTrace
 
 dataSpecVer = 0.1 # Min data spec version expected & used
 
@@ -59,19 +59,25 @@ def search(searchText):
 
     searchText = swi.normalize_text(searchText)
     words = searchText.split()
-    calcNgrams = swi.build_ngrams(words, sysConfig['ngram'])
+    ngramList = swi.build_ngrams(words, sysConfig['ngram'])
 
-    swi.trace_log( _sysLogLevel, _logInfo, ['searchText', searchText])
-    swi.trace_log( _sysLogLevel, _logConfig, ['ngramWidth', sysConfig['ngram']])
-    swi.trace_log( _sysLogLevel, _logInfo, ['calcNgrams'] + calcNgrams)
+    swi.trace_log( _logSysLevel, _logInfo, {'searchText': searchText})
+    swi.trace_log( _logSysLevel, _logConfig, {'ngramWidth': sysConfig['ngram']})
+    swi.trace_log( _logSysLevel, _logInfo, {'ngramList': ngramList})
 
-    topSrcMatches = swi.calc_matches(dbStores, calcNgrams, 10)
+    topSrcMatches, topSrcInfo, unseenNgrams = swi.calc_matches(dbStores, ngramList, 10)
 
     print 'topSrcMatches:'
     for index in range(0, len(topSrcMatches)):
         srcID = topSrcMatches[index]
-        print str(index+1).rjust(4), ':', dbStores['docmeta'][srcID]['cat'], dbStores['docmeta'][srcID]['subcat'], srcID, dbStores['docmeta'][srcID]['path']
+        print str(index+1).rjust(4), ':', dbStores['docmeta'][srcID]['cat'], dbStores['docmeta'][srcID]['subcat'], str(srcID), str(topSrcInfo[srcID]['score']).rjust(14), str(topSrcInfo[srcID]['ngrams']).rjust(4), dbStores['docmeta'][srcID]['path']
     #rof
+
+    swi.trace_log( _logSysLevel, _logStatus, "ngrams used:")
+    swi.trace_log( _logSysLevel, _logStatus, sorted(ngramList))
+    swi.trace_log( _logSysLevel, _logStatus, "ngrams not indexed:")
+    swi.trace_log( _logSysLevel, _logStatus, sorted(unseenNgrams))
+
     swi.close_datastores(dbStores)
     return
 #fed
@@ -80,21 +86,34 @@ def index_files():
     dbStores = swi.open_datastores()
     sysConfig = swi.sys_config(dbStores)
 
-    swi.trace_log( _sysLogLevel, _logConfig, sysConfig)
+    swi.trace_log( _logSysLevel, _logConfig, sysConfig)
 
+    # Index *.TXT files
     srcCat = 'FILE'
     srcSubCat = 'TXT'
-
     fileList = []
+
     for root, dirs, files in os.walk(sysConfig['corpus']):
         for file in files:
             if file.endswith((".txt",".TXT")): fileList.append(os.path.join(root, file))
         #rof
     #rof
+    swi.trace_log( _logSysLevel, _logInfo, 'Found '+str(len(fileList))+' '+srcCat+' of '+srcSubCat+' to scan')
+    swi.trace_log( _logSysLevel, _logTrace, ['Last 10 Files to scan'] + fileList[-10:])
+    swi.index_file_txt(dbStores, sysConfig, fileList, srcCat, srcSubCat)
 
-    swi.trace_log( _sysLogLevel, _logInfo, 'Found '+str(len(fileList))+' '+srcCat+' of '+srcSubCat+' to scan')
-    swi.trace_log( _sysLogLevel, _logTrace, ['Last 10 Files to scan'] + fileList[:-10])
+    # Index *.CSV files
+    srcCat = 'FILE'
+    srcSubCat = 'CSV'
+    fileList = []
 
+    for root, dirs, files in os.walk(sysConfig['corpus']):
+        for file in files:
+            if file.endswith((".csv",".CSV")): fileList.append(os.path.join(root, file))
+        #rof
+    #rof
+    swi.trace_log( _logSysLevel, _logInfo, 'Found '+str(len(fileList))+' '+srcCat+' of '+srcSubCat+' to scan')
+    swi.trace_log( _logSysLevel, _logTrace, ['Last 10 Files to scan'] + fileList[-10:])
     swi.index_file_txt(dbStores, sysConfig, fileList, srcCat, srcSubCat)
 
     swi.close_datastores(dbStores)
@@ -120,14 +139,14 @@ def main(argv):
 
     for opt, arg in opts:
         if opt in ('-h', '--help'):
-            swi.trace_log( _sysLogLevel, _logInfo, 'Arg - Help')
+            swi.trace_log( _logSysLevel, _logInfo, 'Arg - Help')
             print helpText
             sys.exit()
         elif opt in ("-i", "--index"):
-            swi.trace_log( _sysLogLevel, _logInfo, 'Arg - Index')
+            swi.trace_log( _logSysLevel, _logInfo, 'Arg - Index')
             index_files()
         elif opt in ("-s", "--search", '--find'):
-            swi.trace_log( _sysLogLevel, _logInfo, 'Arg - Search')
+            swi.trace_log( _logSysLevel, _logInfo, 'Arg - Search')
             search(arg)
         #fi
     #rof
