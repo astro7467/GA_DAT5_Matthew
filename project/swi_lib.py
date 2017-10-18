@@ -20,16 +20,83 @@
 
 """
 import itertools
-import math
 import re
 import shelve
 import uuid
 
 _trace = True # enable increased data reporting
-_docMetaStore_ngrams = True # Storage of ngram list in docMetaStore per srcID
+_storeDocMeta_ngrams = True # Storage of ngram list in dbStores['docmeta'] per srcID
+
+# Current Suggested Global Variables for use with traceLog
+_logError = 0
+_logStatus = 1
+_logConfig = 2
+_logInfo = 3
+_logTrace = 4
+_sysLogLevel = _logTrace
+#_sysLogLevel = _logStatus
+
+# Common Logging/Trace Routine
+def trace_log(sysLogLevel, logType, logData):
+
+    import time
+
+    logTypes = ['ERROR', 'STATUS', 'CONFIG', 'INFO', 'TRACE']
+
+    if logType < 0 : logType = 0
+    if logType > len(logTypes) -1 : logType = len(logTypes) -1
+
+    # if (logType < 0 or logType > len(logTypes) -1):
+    #     trace_log( sysLogLevel, 0, 'Following traceLog call changed to ERROR, made with invalid LogType: ' + str(logType))
+    #     logType = 0
+    # #fi
+
+    if logType <= sysLogLevel:
+        logText = time.strftime("%Y-%m-%d %H:%M:%S UTC%Z %a") + ' ' + logTypes[logType].ljust(8)
+        newLinePrefix = ' ' * len(logText)
+        logTextList = []
+        maxLineLen = 120
+        if ( isinstance(logData, str) or isinstance(logData, int) or isinstance(logData, float) ):
+            logTextList = [logText + str(logData).strip()]
+        elif ( isinstance(logData, list) or isinstance(logData, tuple)):
+            firstItem = True
+            for item in logData:
+                if not firstItem:
+                    logText += ', '
+                    if len(logText) > maxLineLen:
+                        logTextList += [str(logText)]
+                        logText = newLinePrefix
+                    #fi
+                #fi
+                logText += str(item).strip()
+                firstItem = False
+            #rof
+            logTextList += [str(logText)]
+        elif isinstance(logData, dict):
+            firstItem = True
+            for key in logData.keys():
+                if not firstItem:
+                    logText = logText + ', '
+                    if len(logText) > maxLineLen:
+                        logTextList += [str(logText)]
+                        logText = newLinePrefix
+                    #fi
+                #fi
+                logText += str(key).strip() + ': ' + str(logData[key]).strip()
+                firstItem = False
+            #rof
+            logTextList += [str(logText)]
+        #fi
+
+        for line in logTextList: print line
+    #fi
+#def
 
 #find N best matches of given Ngrams vs Ngram Index
-def calc_matches(ngramStore, ngramList, n=12):
+def calc_matches(dbStores, ngramList, n=12):
+
+    import math
+
     srcNgramCounts = {} # Store Raw per SrcID, by ngram counts
     ngramCounts = {}    # Per ngram how many unique (srcID) counts
     ngramWeights = {}   # Weight of each ngram in calcing srcID's value
@@ -39,7 +106,7 @@ def calc_matches(ngramStore, ngramList, n=12):
 
     # Parse ngramList for unseen ngrams and remove
     for ngram in ngramList[:]:
-        if not ngramStore.has_key(ngram):
+        if not dbStores['ngram'].has_key(ngram):
             ngramList.remove(ngram)
         #fi
     #rof
@@ -47,39 +114,45 @@ def calc_matches(ngramStore, ngramList, n=12):
     # take verified ngram list and build counts
     for ngram in ngramList:
         # cycle thru srcID with ngram, adding to srcNgramCounts & ngramCounts
-        for srcID in ngramStore[ngram].keys():
+        for srcID in dbStores['ngram'][ngram].keys():
             if not srcNgramCounts.has_key(srcID):
                 # Create and add src's count of ngram
-                srcNgramCounts[srcID] = { ngram:ngramStore[ngram][srcID] }
+                srcNgramCounts[srcID] = { ngram:dbStores['ngram'][ngram][srcID] }
             else:
                 # increment ngram count for src (in theory, this should never happen)
                 if not srcNgramCounts[srcID].has_key(ngram):
                     # Create and add src's ngram count of ngram
-                    srcNgramCounts[srcID][ngram] = ngramStore[ngram][srcID]
+                    srcNgramCounts[srcID][ngram] = dbStores['ngram'][ngram][srcID]
                 else:
                     # increment ngram count for src (in theory, this should never happen)
-                    srcNgramCounts[srcID][ngram] += ngramStore[ngram][srcID]
+                    srcNgramCounts[srcID][ngram] += dbStores['ngram'][ngram][srcID]
                 #fi
             #fi
 
             # Record total ngram appearances so we can use as weight later
             if not ngramCounts.has_key(ngram):
                 # Create and add src's count of ngram
-                ngramCounts[ngram] = ngramStore[ngram][srcID]
+                ngramCounts[ngram] = dbStores['ngram'][ngram][srcID]
             else:
                 # Increment Total instances of ngram's occurance
-                ngramCounts[ngram] += ngramStore[ngram][srcID]
+                ngramCounts[ngram] += dbStores['ngram'][ngram][srcID]
             #fi
-            ngramWeightBase += ngramStore[ngram][srcID]
+            ngramWeightBase += dbStores['ngram'][ngram][srcID]
         #rof
-        if _trace: print('UPDATE: ngramWeightBase, ngramStore[ngram]:', ngramWeightBase, ngram, ngramStore[ngram])
+        trace_log( _sysLogLevel, _logTrace, ['ngramWeightBase, dbStores[ngram][ngram]:', ngramWeightBase, ngram, dbStores['ngram'][ngram]])
     #rof
 
     # Assign a weight to each based on 'uniquiness'
     for ngram, ngramCount in sorted(ngramCounts.iteritems(), reverse=True, key=lambda (k,v): (v,k)):
-        ngramWeight = math.log(ngramWeightBase, ngramCount) * len(ngram.split())
+        try:
+            # More common ngrams get lower scores, longer ngrams get higher score
+            ngramWeight = math.log(float(ngramWeightBase), float(ngramCount))
+        except:
+            ngramWeight = 1.0
+        #yrt
+        ngramWeight = ngramWeight * (float(ngramWeightBase) - float(ngramCount)) * float(len(ngram.split()))
         ngramWeights[ngram] = ngramWeight
-        if _trace: print "INFO: ngramWeight, count, ngram", ngramWeight, ngramCount, ngram
+        trace_log( _sysLogLevel, _logTrace, {'Routine': 'Weight', 'ngram': ngram, 'ngramWeight': ngramWeight, 'ngramCount': ngramCount, 'ngramWeightBase': ngramWeightBase})
     #rof
 
     for srcID in srcNgramCounts:
@@ -91,18 +164,18 @@ def calc_matches(ngramStore, ngramList, n=12):
                 srcWeightedScore[srcID] += WeightedScore
             #fi
         #rof
-        if _trace: print "INFO: srcWeightedScore[srcID]", srcID, srcWeightedScore[srcID]
+        trace_log( _sysLogLevel, _logInfo, ['srcWeightedScore[srcID]', srcID, srcWeightedScore[srcID]])
     #rof
 
-    if _trace: print "INFO: srcWeightedScore", srcWeightedScore
+    trace_log( _sysLogLevel, _logInfo, ['srcWeightedScore', srcWeightedScore])
 
     topSrcMatches = []
     for srcID, WeightedScore in sorted(srcWeightedScore.iteritems(), reverse=True, key=lambda (k,v): (v,k)):
         topSrcMatches.append(srcID)
-        if _trace: print "INFO: topSrcMatches, WeightedScore, srcID", WeightedScore, srcID
+        trace_log( _sysLogLevel, _logTrace, ['topSrcMatches, WeightedScore, srcID', WeightedScore, srcID])
     #rof
 
-    if _trace: print "INFO: topSrcMatches", topSrcMatches
+    trace_log( _sysLogLevel, _logInfo, ['topSrcMatches'] + topSrcMatches)
 
     return topSrcMatches
 #fed
@@ -120,79 +193,80 @@ def normalize_text(text):
 ### Open Datastores and return handles
 # TODO: Serperate W/R opens from RO opens
 def open_datastores():
+    dbStores = {}
     # Config Datastore
-    rootConfig = shelve.open('data/config.db', writeback=True)
+    dbStores['config'] = shelve.open('data/config.db', writeback=True)
 
     # Ngram Datastore (Core index)
-    rootNgram = shelve.open('data/ngram.db', writeback=True)
+    dbStores['ngram'] = shelve.open('data/ngram.db', writeback=True)
 
     # Document Meta Data Datastore
-    rootDocMeta = shelve.open('data/docmeta.db', writeback=True)
+    dbStores['docmeta'] = shelve.open('data/docmeta.db', writeback=True)
 
     # Document Stats (file ngrams) Datastore
-    rootDocStat = shelve.open('data/docstat.db', writeback=True)
+    dbStores['docstat'] = shelve.open('data/docstat.db', writeback=True)
 
     #file Type/Path to UUID Datastore
-    rootSources = shelve.open('data/sources.db', writeback=True)
+    dbStores['sources'] = shelve.open('data/sources.db', writeback=True)
 
-    return rootConfig, rootNgram, rootDocMeta, rootDocStat, rootSources
+    return dbStores
 #fed
 
 # UUID Management
-def sys_config(configStore):
+def sys_config(dbStores):
+    sysConfig = {}
 
     try:
-        uuidInstance = configStore['uuid']
+        sysConfig['uuid'] = dbStores['config']['uuid']
     except:
-        configStore['uuid'] = str(uuid.uuid1())
-        uuidInstance = configStore['uuid']
+        dbStores['config']['uuid'] = str(uuid.uuid1())
+        sysConfig['uuid'] = dbStores['config']['uuid']
     #yrt
 
     try:
-        corpusDir = configStore['corpus']
+        sysConfig['corpus'] = dbStores['config']['corpus']
     except:
-        configStore['corpus'] = './corpus'
-        corpusDir = configStore['corpus']
+        dbStores['config']['corpus'] = './corpus'
+        sysConfig['corpus'] = dbStores['config']['corpus']
     #yrt
 
     try:
-        ngramWidth = configStore['ngram']
+        sysConfig['ngram'] = dbStores['config']['ngram']
     except:
-        configStore['ngram'] = 3
-        ngramWidth = configStore['ngram']
+        dbStores['config']['ngram'] = 3
+        sysConfig['ngram'] = dbStores['config']['ngram']
     #yrt
 
     try:
-        StoreDataVersion = configStore['version']
+        sysConfig['version'] = dbStores['config']['version']
     except:
-        configStore['version'] = 0.1
-        StoreDataVersion = configStore['version']
+        dbStores['config']['version'] = 0.1
+        sysConfig['version'] = dbStores['config']['version']
     #yrt
 
-    configStore.sync()
+    dbStores['config'].sync()
 
-    return uuidInstance, corpusDir, ngramWidth, StoreDataVersion
+    return sysConfig
 #fed
 
 # Match or Create a UUID for data sources
-def uuid_source(rootSources, srcPath, Instance):
+def uuid_source(dbStores, sysConfig, srcPath):
     try:
-        srcUUID = rootSources[srcPath]
+        srcUUID = dbStores['sources'][srcPath]
     except:
-        rootSources[srcPath] = str(uuid.uuid5(uuid.UUID(Instance), srcPath))
-        srcUUID = rootSources[srcPath]
+        dbStores['sources'][srcPath] = str(uuid.uuid5(uuid.UUID(sysConfig['uuid']), srcPath))
+        srcUUID = dbStores['sources'][srcPath]
     #yrt
-    rootSources.sync()
+    dbStores['sources'].sync()
     return str(srcUUID)
 #fed
 
 # Initialize Src Records (i.e. Delete for now)
-def init_source(docMetaStore, docStat, srcID, srcPath, srcCat = 'UNK', srcSubCat = 'UNK'):
+def init_source(dbStores, srcID, srcPath, srcCat='UNK', srcSubCat='UNK'):
     srcID = str(srcID)
     # Create srcID for new sources Meta Data Record, and set minimum values
-    if not docMetaStore.has_key(srcID):
-        #del docMetaStore[srcID]
-        docMetaStore[srcID] = {
+    if not dbStores['docmeta'].has_key(srcID):
+        dbStores['docmeta'][srcID] = {
             'version'   :0.1,
             'path'      :str(srcPath),
             'cat'       :str(srcCat),
@@ -204,85 +278,77 @@ def init_source(docMetaStore, docStat, srcID, srcPath, srcCat = 'UNK', srcSubCat
             'indexscore':0,
             'xrefscore' :0,
             'ngrams'    :[] }
-        docMetaStore.sync()
+        dbStores['docmeta'].sync()
     #fi
 
     # Flush Anagram Line/paragrph data
-    if not docStat.has_key(srcID):
-        #del docStat[srcID]
-        docStat[srcID] = {}
-        docStat.sync()
+    if not dbStores['docstat'].has_key(srcID):
+        dbStores['docstat'][srcID] = {}
+        dbStores['docstat'].sync()
     #fi
     return
 #fed
 
 # Record/Add Source with Ngram usage
-def ngram_store_add(ngramStore, ngram, srcID):
+def ngram_store_add(dbStores, ngram, srcID):
     ngram = str(ngram)
     srcID = str(srcID)
 
-    if not ngramStore.has_key(ngram):
+    if not dbStores['ngram'].has_key(ngram):
         # initialize item if not already in the master dictionary
-        ngramStore[ngram] = {srcID:1}
-        if _trace: print('CREATE: ngramStore[ngram]:', srcID, ngram, ngramStore[ngram])
-    elif srcID in ngramStore[ngram]:
+        dbStores['ngram'][ngram] = {srcID:1}
+        trace_log( _sysLogLevel, _logInfo, ['dbStores[ngram][ngram]:', srcID, ngram, dbStores['ngram'][ngram]])
+    elif srcID in dbStores['ngram'][ngram]:
         # Count finds of ngram in srcID
-        ngramStore[ngram][srcID] += 1
-        if _trace: print('CHANGE: ngramStore[ngram]:', srcID, ngram, ngramStore[ngram])
+        dbStores['ngram'][ngram][srcID] += 1
+        trace_log( _sysLogLevel, _logInfo, ['Changing dbStores[ngram][ngram]:', srcID, ngram, dbStores['ngram'][ngram]])
     else:
         #file isn't recorded as a viable match, then add to list
-        ngramStore[ngram][srcID] = 1
-        if _trace: print('ADD: ngramStore[ngram]:', srcID, ngram, ngramStore[ngram])
+        dbStores['ngram'][ngram][srcID] = 1
+        trace_log( _sysLogLevel, _logInfo, ['Adding dbStores[ngram][ngram]:', srcID, ngram, dbStores['ngram'][ngram]])
     #fi
     return
 #fed
 
 # Record Source includes ngram, and what lines/paragraphs inc ngram
-def src_ngram_add(docMetaStore, docStat, ngram, lineID, srcID):
+def src_ngram_add(dbStores, ngram, lineID, srcID):
     ngram = str(ngram)
     srcID = str(srcID)
     #lineID = str(lineID)
 
-    if _docMetaStore_ngrams:
+    if _storeDocMeta_ngrams:
         # Add ngram's existence into Meta Storage
-        if docMetaStore[srcID]['ngrams'] == []:
-            docMetaStore[srcID]['ngrams'] = [ngram]
-            if _trace: print('CREATE: docMetaStore[srcID][ngrams]:', srcID, ngram, docMetaStore[srcID]['ngrams'][-10:])
-        elif ngram not in docMetaStore[srcID]['ngrams']:
-            docMetaStore[srcID]['ngrams'].append(ngram)
-            if _trace: print('ADD: docMetaStore[srcID][ngrams]:', srcID, ngram, docMetaStore[srcID]['ngrams'][-10:])
+        if dbStores['docmeta'][srcID]['ngrams'] == []:
+            dbStores['docmeta'][srcID]['ngrams'] = [ngram]
+            trace_log( _sysLogLevel, _logInfo, ['Creating dbStores[docmeta][srcID][ngrams]:', srcID, ngram, dbStores['docmeta'][srcID]['ngrams'][-10:]])
+        elif ngram not in dbStores['docmeta'][srcID]['ngrams']:
+            dbStores['docmeta'][srcID]['ngrams'].append(ngram)
+            trace_log( _sysLogLevel, _logInfo, ['Adding dbStores[docmeta][srcID][ngrams]:', srcID, ngram, dbStores['docmeta'][srcID]['ngrams'][-10:]])
         #fi
     #fi
 
     # Add/initialize ngram and line(s) info Source Statistics
-    if not docStat.has_key(srcID):
-        docStat[srcID] = { ngram :[lineID] }
-        if _trace: print('CREATE: docStat[srcID][ngram]:', srcID, ngram, docStat[srcID][ngram][-10:])
-    elif ngram not in docStat[srcID]:
+    if not dbStores['docstat'].has_key(srcID):
+        dbStores['docstat'][srcID] = { ngram :[lineID] }
+        trace_log( _sysLogLevel, _logInfo, ['Creating dbStores[docstat][srcID][ngram]:', srcID, ngram, dbStores['docstat'][srcID][ngram][-10:]])
+    elif ngram not in dbStores['docstat'][srcID]:
         # if ngram hasn't been initialized
-        docStat[srcID][ngram] = [lineID]
-        if _trace: print('CREATE: docStat[srcID][ngram]:', srcID, ngram, docStat[srcID][ngram][-10:])
-    elif lineID not in docStat[srcID][ngram]:
+        dbStores['docstat'][srcID][ngram] = [lineID]
+        trace_log( _sysLogLevel, _logInfo, ['Creating dbStores[docstat][srcID][ngram]:', srcID, ngram, dbStores['docstat'][srcID][ngram][-10:]])
+    elif lineID not in dbStores['docstat'][srcID][ngram]:
         # if line isn't recorded as a viable match, then add to list
-        docStat[srcID][ngram].append(lineID)
-        if _trace: print('ADD: docStat[srcID][ngram]:', srcID, ngram, docStat[srcID][ngram][-10:])
+        dbStores['docstat'][srcID][ngram].append(lineID)
+        trace_log( _sysLogLevel, _logInfo, ['Adding dbStores[docstat][srcID][ngram]:', srcID, ngram, dbStores['docstat'][srcID][ngram][-10:]])
     #fi
     return
 #fed
 
 # Close/Cleanup datastores
-def close_datastores(configStore, ngramStore, docMetaStore, docStat):
-    configStore.sync()
-    configStore.close()
-
-    ngramStore.sync()
-    ngramStore.close()
-
-    docMetaStore.sync()
-    docMetaStore.close()
-
-    docStat.sync()
-    docStat.close()
+def close_datastores(dbStores):
+    for fileHandle in dbStores.keys():
+        dbStores[fileHandle].sync()
+        dbStores[fileHandle].close()
+    #rof
     return
 #fed
 
@@ -308,3 +374,51 @@ def build_ngrams(inputList, n=2):
     #rof
     return [item for item in outputList if item != '']
 #fed
+
+# For each word/ngram add to master dictionary with FileID & In FileDict
+def src_line_ngram_storage(dbStores, srcID, lineID, lineNgrams):
+    for item in lineNgrams:
+        #first Record Ngram is in File, then record which lines have the Ngram
+        ngram_store_add(dbStores, item, srcID)
+        src_ngram_add(dbStores, item, lineID, srcID)
+    #rof
+
+# Process given file as raw text line by line
+def index_file_txt(dbStores, sysConfig, fileList, srcCat, srcSubCat):
+
+    from sklearn.feature_extraction.text import CountVectorizer #, TfidfVectorizer
+
+    # Generate Vectorization of ngrams and strip stop words
+    vectorizer = CountVectorizer(ngram_range=(1, sysConfig['ngram']), stop_words='english')
+    ngramAnalyzer = vectorizer.build_analyzer()
+
+    # for each file, get a UID and parse
+    for fileName in fileList:
+        # Build a individual File Breakdown dictionary
+        srcID = uuid_source(dbStores, sysConfig, '' + srcCat + ':' + srcSubCat + ':' + fileName + '')
+        init_source(dbStores, srcID, fileName, srcCat, srcSubCat)
+
+        trace_log( _sysLogLevel, _logTrace, ['SrcID, Filename, SrcCat, SrcSubCat:', srcID, fileName, srcCat, srcSubCat])
+
+        if not dbStores['docmeta'][srcID]['indexed']:
+            lineID = 0
+            with open( fileName, mode = 'rU' ) as currFile:
+                trace_log( _sysLogLevel, _logTrace, ['LineID, fileName:', lineID, normalize_text(fileName)])
+                src_line_ngram_storage(dbStores, srcID, lineID, ngramAnalyzer(normalize_text(fileName)))
+
+                # for each line get a UID and parse line
+                for lineID, line in enumerate(currFile, 1):
+                    normalizedText = normalize_text(line)
+                    if not normalizedText in [None, '', ' ']:
+                        trace_log( _sysLogLevel, _logTrace, ['LineID, normalizedText:', lineID, normalizedText])
+                        src_line_ngram_storage(dbStores, srcID, lineID, ngramAnalyzer(normalizedText))
+                    #fi
+                #rof
+            #htiw
+            dbStores['docmeta'][srcID]['indexed'] = True
+            dbStores['ngram'].sync()
+            dbStores['docmeta'].sync()
+            dbStores['docstat'].sync()
+        #fi
+    #rof
+#def

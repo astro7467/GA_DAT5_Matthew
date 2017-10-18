@@ -10,18 +10,18 @@
     the Free Software Foundation, either version 3 of the License, or
     (at your option) any later version.
 
-    This program is distributed in the hope that it will be useful,
+    ThisysConfig['vis dis']tributed in the hope that it will be useful,
     but WITHOUT ANY WARRANTY; without even the implied warranty of
     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
     GNU General Public License for more details.
 
-    You should have received a copy of the GNU General Public License
+    YousysConfig['vve rec']eived a copy of the GNU General Public License
     along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 """
 
 """
-    Current design is a simple minimum DB design
+This system only has is a simple minimum DB design
     *** will not scale - proof of concept only ***
     for full multi doc indexing, would need to breakdown datastores
     to faciliate concurrency, and different document types and meta data needs.
@@ -33,121 +33,71 @@ TODOS / Full Product Considerations:
 - Seperate W/R DB activity (eg index) from RO DB activity (search)
 - Search History (Learning/ngram considerations)
 - Explore ngram vectorizations
-- Split each ngram width into separate tables - better manage & scale ngram changes
+- Split each ngram width into separate tables - better manage ngram changes
 - Consider 1st Pass index (Fast - monogram) vs background index (bigram -> Ngram)
-- line/cell/tag/paragraph weights or tags eg. <h1> > <h2>, 'word': 'definition' weighing
-- Seperate DB backend from code (i.e. shelve/cpickle vs sqlite/mySQL/Marina/PostgresSQL)
+- line/cell/tag/paragraph weights or tags eg. <h1> > <h2>, 'word': 'definition' weighsysConfig['vrate D']B backend from code (i.e. shelve/cpickle vs sqlite/mySQL/Marina/PostgresSQL)
 """
 
 import swi_lib as swi
 import getopt
-import glob
 import os
 import sys
 
-from sklearn.feature_extraction.text import CountVectorizer #, TfidfVectorizer
+_logError = 0
+_logStatus = 1
+_logConfig = 2
+_logInfo = 3
+_logTrace = 4
+_sysLogLevel = _logTrace
 
-trace = True # Print out extra info as we go
 dataSpecVer = 0.1 # Min data spec version expected & used
 
 #Search for string in index
 def search(searchText):
-    configStore, ngramStore, docMetaStore, docStat, src2uuid = swi.open_datastores()
-    uuidInstance, corpusDir, ngramWidth, StoreDataVersion = swi.sys_config(configStore)
+    dbStores = swi.open_datastores()
+    sysConfig = swi.sys_config(dbStores)
 
     searchText = swi.normalize_text(searchText)
     words = searchText.split()
-    calcNgrams = swi.build_ngrams(words, ngramWidth)
+    calcNgrams = swi.build_ngrams(words, sysConfig['ngram'])
 
-    if trace:
-        print('INFO: Text         :', searchText)
-        print('INFO: Width, ngrams:', ngramWidth, calcNgrams)
-    #fi
+    swi.trace_log( _sysLogLevel, _logInfo, ['searchText', searchText])
+    swi.trace_log( _sysLogLevel, _logConfig, ['ngramWidth', sysConfig['ngram']])
+    swi.trace_log( _sysLogLevel, _logInfo, ['calcNgrams'] + calcNgrams)
 
-    topSrcMatches = swi.calc_matches(ngramStore, calcNgrams, 10)
+    topSrcMatches = swi.calc_matches(dbStores, calcNgrams, 10)
 
     print 'topSrcMatches:'
     for index in range(0, len(topSrcMatches)):
         srcID = topSrcMatches[index]
-        print index+1, ':', srcID, docMetaStore[srcID]['cat'],docMetaStore[srcID]['subcat'],  docMetaStore[srcID]['path']
+        print str(index+1).rjust(4), ':', dbStores['docmeta'][srcID]['cat'], dbStores['docmeta'][srcID]['subcat'], srcID, dbStores['docmeta'][srcID]['path']
     #rof
-    swi.close_datastores(configStore, ngramStore, docMetaStore, docStat)
+    swi.close_datastores(dbStores)
     return
 #fed
 
 def index_files():
-    configStore, ngramStore, docMetaStore, docStat, src2uuid = swi.open_datastores()
-    uuidInstance, corpusDir, ngramWidth, StoreDataVersion = swi.sys_config(configStore)
+    dbStores = swi.open_datastores()
+    sysConfig = swi.sys_config(dbStores)
 
-    if trace: print('PROCESS: uuidInstance, corpusDir, ngramWidth, StoreDataVersion:', uuidInstance, corpusDir, ngramWidth, StoreDataVersion)
+    swi.trace_log( _sysLogLevel, _logConfig, sysConfig)
 
     srcCat = 'FILE'
     srcSubCat = 'TXT'
 
-    #path = os.path.join(corpusDir, '*.txt')
-    #foundfiles = glob.glob(path)
-    foundFiles = []
-    for root, dirs, files in os.walk(corpusDir):
+    fileList = []
+    for root, dirs, files in os.walk(sysConfig['corpus']):
         for file in files:
-            if file.endswith(".txt"):
-                 foundFiles.append(os.path.join(root, file))
-            #fi
+            if file.endswith((".txt",".TXT")): fileList.append(os.path.join(root, file))
         #rof
     #rof
 
-    if trace: print('PROCESS: Files:', foundFiles[:-10])
+    swi.trace_log( _sysLogLevel, _logInfo, 'Found '+str(len(fileList))+' '+srcCat+' of '+srcSubCat+' to scan')
+    swi.trace_log( _sysLogLevel, _logTrace, ['Last 10 Files to scan'] + fileList[:-10])
 
-    # Generate Vectorization of ngrams and strip stop words
-    vectorizer = CountVectorizer(ngram_range=(1, ngramWidth), stop_words='english')
-    ngramAnalyzer = vectorizer.build_analyzer()
+    swi.index_file_txt(dbStores, sysConfig, fileList, srcCat, srcSubCat)
 
-    # for each file, get a UID and parse
-    for fileName in foundFiles:
-        # Build a individual File Breakdown dictionary
-        srcID = swi.uuid_source( src2uuid, '' + srcCat + ':' + srcSubCat + ':' + fileName + '', uuidInstance)
-        swi.init_source(docMetaStore, docStat, srcID, fileName, srcCat, srcSubCat)
-
-        if trace: print('PROCESS: SrcID, Filename, SrcCat, SrcSubCat:', srcID, fileName, srcCat, srcSubCat)
-
-        if not docMetaStore[srcID]['indexed']:
-            lineID = 0
-            with open( fileName, mode = 'rU' ) as currFile:
-                lineNgrams = ngramAnalyzer( swi.normalize_text(fileName) )
-
-                if trace: print('PROCESS: LineID, fileName:', lineID, swi.normalize_text(fileName))
-
-                # For each word/ngram add to master dictionary with FileID & In FileDict
-                for item in lineNgrams:
-                    #first Record Ngram is in File, then record which lines have the Ngram
-                    swi.ngram_store_add(ngramStore, item, srcID)
-                    swi.src_ngram_add(docMetaStore, docStat, item, 0, srcID)
-                #rof
-
-                # for each line get a UID and parse line
-                for lineID, line in enumerate(currFile, 1):
-                    normalizedText = swi.normalize_text(line)
-                    if not normalizedText in [None, '', ' ']:
-                        if trace: print('PROCESS: LineID, normalizedText:', lineID, normalizedText)
-
-                        # store the lines vectorization for later analysis
-                        lineNgrams = ngramAnalyzer( normalizedText )
-
-                        # For each word/ngram add to master dictionary with FileID & In FileDict
-                        for item in lineNgrams:
-                            #first Record Ngram is in File, then record which lines have the Ngram
-                            swi.ngram_store_add(ngramStore, item, srcID)
-                            swi.src_ngram_add(docMetaStore, docStat, item, lineID, srcID)
-                        #rof
-                    #fi
-                #rof
-            #htiw
-            docMetaStore[srcID]['indexed'] = True
-            ngramStore.sync()
-            docMetaStore.sync()
-            docStat.sync()
-        #fi
-    #rof
-    swi.close_datastores(configStore, ngramStore, docMetaStore, docStat)
+    swi.close_datastores(dbStores)
     return
 #fed
 
@@ -170,14 +120,14 @@ def main(argv):
 
     for opt, arg in opts:
         if opt in ('-h', '--help'):
-            if trace: print('INFO: Arg - Help')
+            swi.trace_log( _sysLogLevel, _logInfo, 'Arg - Help')
             print helpText
             sys.exit()
         elif opt in ("-i", "--index"):
-            if trace: print('INFO: Arg - Index')
+            swi.trace_log( _sysLogLevel, _logInfo, 'Arg - Index')
             index_files()
         elif opt in ("-s", "--search", '--find'):
-            if trace: print('INFO: Arg - Search')
+            swi.trace_log( _sysLogLevel, _logInfo, 'Arg - Search')
             search(arg)
         #fi
     #rof
