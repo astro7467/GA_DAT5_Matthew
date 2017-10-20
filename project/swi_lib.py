@@ -617,7 +617,7 @@ def index_file_txt(dbStores, sysConfig, fileList, srcCat, srcSubCat):
             with open( fileName, mode = 'rU' ) as currFile:
                 normalisedText = normalise_text(fileName)
                 if not normalisedText in [None, '', ' ']:
-                    trace_log( _logSysLevel, _logInfo, {'SrcID':srcID, 'Filename':filename, 'SrcCat':srcCat, 'SrcSubCat': srcSubCat, 'LineID': lineID, 'NormalisedText':normalisedText}, context='Initializing')
+                    trace_log( _logSysLevel, _logInfo, {'SrcID':srcID, 'Filename':fileName, 'SrcCat':srcCat, 'SrcSubCat': srcSubCat, 'LineID': lineID, 'NormalisedText':normalisedText}, context='Initializing')
                     dict_parse_words(dbStores, sysConfig, normalisedText.split())
                     src_line_ngram_storage(dbStores, srcID, lineID, ngramAnalyzer(normalisedText))
                 #fi
@@ -626,7 +626,7 @@ def index_file_txt(dbStores, sysConfig, fileList, srcCat, srcSubCat):
                 for lineID, line in enumerate(currFile, 1):
                     normalisedText = normalise_text(line)
                     if not normalisedText in [None, '', ' ']:
-                        trace_log( _logSysLevel, _logTrace, {'SrcID':srcID, 'Filename':filename, 'SrcCat':srcCat, 'SrcSubCat': srcSubCat, 'LineID': lineID, 'NormalisedText':normalisedText}, context='Processing')
+                        trace_log( _logSysLevel, _logTrace, {'SrcID':srcID, 'Filename':fileName, 'SrcCat':srcCat, 'SrcSubCat': srcSubCat, 'LineID': lineID, 'NormalisedText':normalisedText}, context='Processing')
                         dict_parse_words(dbStores, sysConfig, normalisedText.split())
                         src_line_ngram_storage(dbStores, srcID, lineID, ngramAnalyzer(normalisedText))
                     #fi
@@ -636,7 +636,7 @@ def index_file_txt(dbStores, sysConfig, fileList, srcCat, srcSubCat):
             dbStores['ngram'].sync()
             dbStores['docmeta'].sync()
             dbStores['docstat'].sync()
-            trace_log( _logSysLevel, _logInfo, {'SrcID':srcID, 'Filename':filename, 'SrcCat':srcCat, 'SrcSubCat': srcSubCat, 'Lines': lineID}, context='Finished')
+            trace_log( _logSysLevel, _logInfo, {'SrcID':srcID, 'Filename':fileName, 'SrcCat':srcCat, 'SrcSubCat': srcSubCat, 'Lines': lineID}, context='Finished')
         #fi
     #rof
 #def

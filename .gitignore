@@ -30,6 +30,8 @@ celerybeat-schedule
 *~
 
 # project database files
-project/data/*.db.*
+project/data/*.bak
+project/data/*.dat
+project/data/*.dir
 project/corpus
 
