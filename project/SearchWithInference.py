@@ -67,7 +67,7 @@ def system_analyse():
     swi.trace_log(_logConfig, _logStatus, sysConfig, 'Config Key & Value Pairs')
 
     dictVector = max(dbStores['dict'].values())
-    vecVector = max(dbStores['vector'].keys())
+    vecVector = max(dbStores['vectors']['vectors'].keys())
     vector = swi.dictionary_vector(dbStores)
     print 'Vector Trace: Highest Dictionary / Highest Vectors / Current Counter', dictVector, '/', vecVector, '/', vector
 
@@ -118,23 +118,23 @@ def system_analyse():
     print line
     print 'Dictionary & Vector File Info'
     print line
-    print 'Dictionary & Vector Key Counts (Should be Equal):', len(dbStores['dict'].keys()), '/', len(dbStores['vector'].keys())
+    print 'Dictionary & Vector Key Counts (Should be Equal):', len(dbStores['dict'].keys()), '/', len(dbStores['vectors']['vectors'].keys())
     print 'Dictionary & Vectors (inc Validation) (word->vector->word):'
     keyList = list( dbStores['dict'].keys() )
     random.shuffle(keyList)
     for key in keyList[:10]:
-        print key, '(word) ->', dbStores['dict'][key], '(vector) ->', dbStores['vector'][dbStores['dict'][key]], '(word)'
+        print key, '(word) ->', dbStores['dict'][key], '(vector) ->', dbStores['vectors']['vectors'][dbStores['dict'][key]], '(word)'
         swi.dict_parse_words(dbStores, sysConfig, [key], xcheck=True)
     #rof
 
     print line
     print 'Vector & Dictionary (inc Validation) (vector->word->vector):'
     print line
-    keyList = list( dbStores['vector'].keys() )
+    keyList = list( dbStores['vectors']['vectors'].keys() )
     random.shuffle(keyList)
     for key in keyList[:10]:
-        print key, '(vector) ->', dbStores['vector'][key], '(word) ->', dbStores['dict'][dbStores['vector'][key]], '(vector)'
-        swi.dict_parse_words(dbStores, sysConfig, [dbStores['vector'][key]], xcheck=True)
+        print key, '(vector) ->', dbStores['vectors']['vectors'][key], '(word) ->', dbStores['dict'][dbStores['vectors']['vectors'][key]], '(vector)'
+        swi.dict_parse_words(dbStores, sysConfig, [dbStores['vectors']['vectors'][key]], xcheck=True)
     #rof
 
     print line
@@ -168,6 +168,44 @@ def search(searchText):
 
     swi.trace_log( _logSysLevel, _logStatus, sorted(ngramList), context='ngrams used')
     swi.trace_log( _logSysLevel, _logStatus, sorted(unseenNgrams), context='ngrams not used')
+
+    swi.close_datastores(dbStores)
+    return
+#fed
+
+def w2v_files():
+    dbStores = swi.open_datastores()
+    sysConfig = swi.sys_config(dbStores)
+
+    swi.trace_log( _logSysLevel, _logConfig, sysConfig, context='sysConfig')
+
+    # Index *.TXT files
+    srcCat = 'FILE'
+    srcSubCat = 'TXT'
+    fileList = []
+
+    for root, dirs, files in os.walk(sysConfig['corpus']):
+        for file in files:
+            if file.endswith((".txt",".TXT")): fileList.append(os.path.join(root, file))
+        #rof
+    #rof
+    swi.trace_log( _logSysLevel, _logInfo, 'Found '+str(len(fileList))+' '+srcCat+' of '+srcSubCat+' to scan')
+    swi.trace_log( _logSysLevel, _logTrace, fileList[-10:], context='Last 10 Files to scan')
+    swi.vector_file(dbStores, sysConfig, fileList)
+
+    # Index *.CSV files
+    srcCat = 'FILE'
+    srcSubCat = 'CSV'
+    fileList = []
+
+    for root, dirs, files in os.walk(sysConfig['corpus']):
+        for file in files:
+            if file.endswith((".csv",".CSV")): fileList.append(os.path.join(root, file))
+        #rof
+    #rof
+    swi.trace_log( _logSysLevel, _logInfo, 'Found '+str(len(fileList))+' '+srcCat+' of '+srcSubCat+' to scan')
+    swi.trace_log( _logSysLevel, _logTrace, fileList[-10:], context='Last 10 Files to scan')
+    swi.vector_file(dbStores, sysConfig, fileList)
 
     swi.close_datastores(dbStores)
     return
@@ -211,6 +249,41 @@ def index_files():
     return
 #fed
 
+# Force Scan of every Dictionary <-> Vector Pair
+def validate_dict():
+    line = '-' * 80
+    print line
+    swi.trace_log( _logSysLevel, _logStatus, 'Validating Dictionary...')
+    dbStores = swi.open_datastores()
+    sysConfig = swi.sys_config(dbStores)
+    count = 0
+    total = len(dbStores['dict'].keys())
+
+    swi.trace_log( _logSysLevel, _logStatus, 'Checking Vector...')
+    minVector = max(dbStores['vectors']['vectors'].keys())
+    vector = swi.dictionary_vector(dbStores)
+
+    if vector <= minVector:
+        oldVector = vector
+        dbStores['config']['nextvector'] = minVector + 1
+        dbStores['config'].sync()
+        vector = swi.dictionary_vector(dbStores)
+        swi.trace_log( _logSysLevel, _logStatus, {'OldVector': oldVector, 'NewVector': vector, 'MinVector': minVector}, context='Bad Next Vector Found')
+    #fi
+
+    for word in list(dbStores['dict'].keys()):
+        swi.dict_parse_words(dbStores, sysConfig, [word], xcheck=True)
+        if count % 100 == 0:
+            swi.trace_log( _logSysLevel, _logStatus, 'Progress: ' + str(count).rjust(len(str(total))+1) + ' of ' + str(total) + ' Last Vector: ' + str(dbStores['config']['nextvector']) + ' - ' + word)
+        #fi
+        count += 1
+    #rof
+    swi.trace_log( _logSysLevel, _logStatus, 'Number of keys Dict: ' + str(len(dbStores['dict'].keys())) )
+    swi.trace_log( _logSysLevel, _logStatus, 'Number of keys Vect: ' + str(len(dbStores['vectors']['vectors'].keys())) )
+    print line
+    swi.close_datastores(dbStores)
+#def
+
 # Parse commandline options
 def main(argv):
     helpText = 'USAGE: SearchWithInference.py <[-h|--help]|[-a|--analyse|--stats][-i|--index]|[-s|--search|--find] text>'
@@ -221,7 +294,7 @@ def main(argv):
     #fi
 
     try:
-        opts, args = getopt.getopt(argv,"ahis:",["analyse", "analysis", "analyze", "help", "index", "search=", "stats", "statistics"])
+        opts, args = getopt.getopt(argv,"ahiVs:",["analyse", "analysis", "analyze", "help", "index", "search=", "stats", "statistics", "vector", "vectorize", "valdict"])
     except getopt.GetoptError:
         print helpText
         print
@@ -236,12 +309,23 @@ def main(argv):
         elif opt in ("-i", "--index"):
             swi.trace_log( _logSysLevel, _logInfo, 'Arg - Index')
             index_files()
+            sys.exit()
         elif opt in ("-s", "--search", '--find'):
             swi.trace_log( _logSysLevel, _logInfo, 'Arg - Search')
             search(arg)
+            sys.exit()
         elif opt in ("-a", "--analyse", "--analysis", "--analyze", "--stats", "--statistics"):
             swi.trace_log( _logSysLevel, _logInfo, 'Arg - Statistics')
             system_analyse()
+            sys.exit()
+        elif opt in ("--valdict"):
+            swi.trace_log( _logSysLevel, _logInfo, 'Arg - Validate Dictionary <-> Vector')
+            validate_dict()
+            sys.exit()
+        elif opt in ("-V", "--vector", "--vectorize"):
+            swi.trace_log( _logSysLevel, _logInfo, 'Arg - Vectorize')
+            w2v_files()
+            sys.exit()
         #fi
     #rof
     return

@@ -1,8 +1,64 @@
+
 <!DOCTYPE html>
 <html>
-<head><meta charset="utf-8" />
-<title>Presentation-SWI</title><script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.1.10/require.min.js"></script>
+<head>
+
+<meta charset="utf-8" />
+<meta http-equiv="X-UA-Compatible" content="chrome=1" />
+
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+<title>Presentation-SWI slides</title>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/require.js/2.1.10/require.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/2.0.3/jquery.min.js"></script>
+
+<!-- General and theme style sheets -->
+<link rel="stylesheet" href="reveal.js/css/reveal.css">
+<link rel="stylesheet" href="reveal.js/css/theme/simple.css" id="theme">
+
+<!-- If the query includes 'print-pdf', include the PDF print sheet -->
+<script>
+if( window.location.search.match( /print-pdf/gi ) ) {
+        var link = document.createElement( 'link' );
+        link.rel = 'stylesheet';
+        link.type = 'text/css';
+        link.href = 'reveal.js/css/print/pdf.css';
+        document.getElementsByTagName( 'head' )[0].appendChild( link );
+}
+
+</script>
+
+<!--[if lt IE 9]>
+<script src="reveal.js/lib/js/html5shiv.js"></script>
+<![endif]-->
+
+<!-- Loading the mathjax macro -->
+<!-- Load mathjax -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS_HTML"></script>
+    <!-- MathJax configuration -->
+    <script type="text/x-mathjax-config">
+    MathJax.Hub.Config({
+        tex2jax: {
+            inlineMath: [ ['$','$'], ["\\(","\\)"] ],
+            displayMath: [ ['$$','$$'], ["\\[","\\]"] ],
+            processEscapes: true,
+            processEnvironments: true
+        },
+        // Center justify equations in code and markdown cells. Elsewhere
+        // we use CSS to left justify single line equations in code cells.
+        displayAlign: 'center',
+        "HTML-CSS": {
+            styles: {'.MathJax_Display': {"margin": 0}},
+            linebreaks: { automatic: true }
+        }
+    });
+    </script>
+    <!-- End of mathjax configuration -->
+
+<!-- Get Font-awesome from cdn -->
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.1.0/css/font-awesome.css">
 
 <style type="text/css">
     /*!
@@ -11718,99 +11774,379 @@ ul.typeahead-list > li > a {
 
 <style type="text/css">
 /* Overrides of notebook CSS for static HTML export */
-body {
-  overflow: visible;
-  padding: 8px;
+.reveal {
+  font-size: 160%;
 }
-
-div#notebook {
-  overflow: visible;
-  border-top: none;
-}@media print {
-  div.cell {
-    display: block;
-    page-break-inside: avoid;
-  } 
-  div.output_wrapper { 
-    display: block;
-    page-break-inside: avoid; 
-  }
-  div.output { 
-    display: block;
-    page-break-inside: avoid; 
-  }
+.reveal pre {
+  width: inherit;
+  padding: 0.4em;
+  margin: 0px;
+  font-family: monospace, sans-serif;
+  font-size: 80%;
+  box-shadow: 0px 0px 0px rgba(0, 0, 0, 0);
+}
+.reveal pre code {
+  padding: 0px;
+}
+.reveal section img {
+  border: 0px solid black;
+  box-shadow: 0 0 10px rgba(0, 0, 0, 0);
+}
+.reveal i {
+  font-style: normal;
+  font-family: FontAwesome;
+  font-size: 2em;
+}
+.reveal .slides {
+  text-align: left;
+}
+.reveal.fade {
+  opacity: 1;
+}
+.reveal .progress {
+  position: static;
+}
+.reveal .controls .navigate-left,
+.reveal .controls .navigate-left.enabled {
+  border-right-color: #727272;
+}
+.reveal .controls .navigate-left.enabled:hover,
+.reveal .controls .navigate-left.enabled.enabled:hover {
+  border-right-color: #dfdfdf;
+}
+.reveal .controls .navigate-right,
+.reveal .controls .navigate-right.enabled {
+  border-left-color: #727272;
+}
+.reveal .controls .navigate-right.enabled:hover,
+.reveal .controls .navigate-right.enabled.enabled:hover {
+  border-left-color: #dfdfdf;
+}
+.reveal .controls .navigate-up,
+.reveal .controls .navigate-up.enabled {
+  border-bottom-color: #727272;
+}
+.reveal .controls .navigate-up.enabled:hover,
+.reveal .controls .navigate-up.enabled.enabled:hover {
+  border-bottom-color: #dfdfdf;
+}
+.reveal .controls .navigate-down,
+.reveal .controls .navigate-down.enabled {
+  border-top-color: #727272;
+}
+.reveal .controls .navigate-down.enabled:hover,
+.reveal .controls .navigate-down.enabled.enabled:hover {
+  border-top-color: #dfdfdf;
+}
+.reveal .progress span {
+  background: #727272;
+}
+div.input_area {
+  padding: 0.06em;
+}
+div.code_cell {
+  background-color: transparent;
+}
+div.prompt {
+  width: 11ex;
+  padding: 0.4em;
+  margin: 0px;
+  font-family: monospace, sans-serif;
+  font-size: 80%;
+  text-align: right;
+}
+div.output_area pre {
+  font-family: monospace, sans-serif;
+  font-size: 80%;
+}
+div.output_prompt {
+  /* 5px right shift to account for margin in parent container */
+  margin: 5px 5px 0 0;
+}
+div.text_cell.rendered .rendered_html {
+  /* The H1 height seems miscalculated, we are just hidding the scrollbar */
+  overflow-y: hidden;
+}
+a.anchor-link {
+  /* There is still an anchor, we are only hidding it */
+  display: none;
+}
+.rendered_html p {
+  text-align: inherit;
+}
+::-webkit-scrollbar
+{
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar *
+{
+  background:transparent;
+}
+::-webkit-scrollbar-thumb
+{
+  background: #727272 !important;
 }
 </style>
 
 <!-- Custom stylesheet, it must be in the same directory as the html file -->
 <link rel="stylesheet" href="custom.css">
 
-<!-- Loading mathjax macro -->
-<!-- Load mathjax -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/mathjax/2.7.1/MathJax.js?config=TeX-AMS_HTML"></script>
-    <!-- MathJax configuration -->
-    <script type="text/x-mathjax-config">
-    MathJax.Hub.Config({
-        tex2jax: {
-            inlineMath: [ ['$','$'], ["\\(","\\)"] ],
-            displayMath: [ ['$$','$$'], ["\\[","\\]"] ],
-            processEscapes: true,
-            processEnvironments: true
-        },
-        // Center justify equations in code and markdown cells. Elsewhere
-        // we use CSS to left justify single line equations in code cells.
-        displayAlign: 'center',
-        "HTML-CSS": {
-            styles: {'.MathJax_Display': {"margin": 0}},
-            linebreaks: { automatic: true }
-        }
-    });
-    </script>
-    <!-- End of mathjax configuration --></head>
+</head>
+
+
 <body>
-  <div tabindex="-1" id="notebook" class="border-box-sizing">
-    <div class="container" id="notebook-container">
-from IPython.display import Image
- %matplotlib inline
- 
+
+
+<div class="reveal">
+<div class="slides">
+<section><section>
 <div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<h1 id="Search-with-Inference">Search with Inference<a class="anchor-link" href="#Search-with-Inference">&#182;</a></h1><h2 id="GA-SG-Data-Science-#5-Project">GA SG Data Science #5 Project<a class="anchor-link" href="#GA-SG-Data-Science-#5-Project">&#182;</a></h2><h3 id="Matthew-A.-Snell">Matthew A. Snell<a class="anchor-link" href="#Matthew-A.-Snell">&#182;</a></h3><h4 id="2017-10-21">2017-10-21<a class="anchor-link" href="#2017-10-21">&#182;</a></h4>
+<h1 id="Search-with-Inference">Search with Inference<a class="anchor-link" href="#Search-with-Inference">&#182;</a></h1><h2 id="Matthew-A.-Snell">Matthew A. Snell<a class="anchor-link" href="#Matthew-A.-Snell">&#182;</a></h2><h3 id="GA-SG-Data-Science-5---Project">GA SG Data Science 5 - Project<a class="anchor-link" href="#GA-SG-Data-Science-5---Project">&#182;</a></h3><h4 id="2017-10-21">2017-10-21<a class="anchor-link" href="#2017-10-21">&#182;</a></h4>
 </div>
 </div>
-</div>
+</div></section></section><section><section>
 <div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<h1 id="Lessons-Learnt-...-So-Far-...">Lessons Learnt ... <em>So Far</em> ...<a class="anchor-link" href="#Lessons-Learnt-...-So-Far-...">&#182;</a></h1><ul>
-<li><p>Who needs classes? It's just a proof of concept...
-  <strong>wrong</strong></p>
+<h1 id="Objective">Objective<a class="anchor-link" href="#Objective">&#182;</a></h1>
+</div>
+</div>
+</div></section></section><section><section>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>Leverage Ngrams plus TensorFlow (Word2Vec) to rank a body of <em>sources</em> against a provided search <em>phrase</em></p>
+<ul>
+<li><p>Rank Sources using Ngram based scoring (width of 3)</p>
 </li>
-<li><p>Who needs a DBMS? It's just a proof of concept...
-  <strong>wrong</strong></p>
-</li>
-<li><p>ETL (cleansing) is slow (cpu time)
-  <strong>get the data models right</strong></p>
-</li>
-<li><p>Dictorionaries ( dict() ) are Great!
-  <strong>nested dictionaries are (code) messy</strong></p>
-</li>
-<li><p>I'll build a non/semi-Data Science model 1st for comparision
-  <strong>time consuming</strong></p>
+<li><p>Suppliment Ngram search with Word2Vec (width of 5) nearest neighbours based <em>re-phrasing</em> of search term</p>
 </li>
 </ul>
 
 </div>
 </div>
+</div></section></section><section><section>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
 </div>
-    </div>
-  </div>
-</body>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Lessons-Learnt-...-So-Far-...">Lessons Learnt ... <em>So Far</em> ...<a class="anchor-link" href="#Lessons-Learnt-...-So-Far-...">&#182;</a></h1>
+</div>
+</div>
+</div></section></section><section><section>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<ul>
+<li><p>Who needs classes? It's just a proof of concept</p>
+<p><strong>Wrong</strong> - Code Complexity</p>
+</li>
+<li><p>Who needs a DBMS? It's just a proof of concept :grimacing:</p>
+<p><strong>Wrong</strong> - Performance</p>
+</li>
+<li><p>ETL (cleansing) is slow (cpu time)</p>
+<p><strong>Get the Data Models Right</strong> - Re-Runs &amp; Validators are expensive</p>
+</li>
+<li><p>Dictionaries <code>dict()</code> or <code>{ k:v }</code> are Great!</p>
+<p><strong>Nested Dictionaries are (code) Messy</strong>:</p>
+<p><code>dict = { k1: { k2: { k3: v }}}</code> -&gt; <code>dict[k1][k2][k3]</code></p>
+</li>
+<li><p>I'll build a non/semi-Data Science model 1st for comparision</p>
+<p><strong>Time Consuming</strong> - More about Python than Data Science</p>
+</li>
+</ul>
 
- 
+</div>
+</div>
+</div></section></section><section><section>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="What-is-an-Ngram?">What is an Ngram?<a class="anchor-link" href="#What-is-an-Ngram?">&#182;</a></h1>
+</div>
+</div>
+</div></section></section><section><section>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>For the purposes of Data Science or NLP, an Ngram (monogram, bigram, trigram, quadgram etc) is a <em>sliding</em> group of <em>words</em> taken from a set of text.</p>
+<p>eg. <code>consider this line of text</code></p>
+
+<pre><code>1gram = `[consider, this, line, of, text]` - 5 elements
+
+2gram = `[consider this, this line, line of, of text]` - 4 elements
+
+3gram = `[consider this line, this line of, line of text]` - 3 elements</code></pre>
+
+</div>
+</div>
+</div></section></section><section><section>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="But-for-Search-Phases,">But for Search Phases,<a class="anchor-link" href="#But-for-Search-Phases,">&#182;</a></h1><h1 id="We-handle-Ngrams-differently">We handle Ngrams differently<a class="anchor-link" href="#We-handle-Ngrams-differently">&#182;</a></h1>
+</div>
+</div>
+</div></section></section><section><section>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>How a search phrase is sequenced or weighted by a user can be very different compared to how the terms are used.</p>
+<p>Consider:</p>
+<p><code>Python Learning Examples SciKit Data Science</code></p>
+<p>vs</p>
+<p><code>Data Science SciKit Learning Python Examples</code></p>
+<p>Using Ngrams, the best hit we get beyond 1gram (low scoring), is the 2gram <code>Data Science</code> - in a sea of documents, this will not rank high - unless a word is rare eg <code>skikit</code></p>
+
+</div>
+</div>
+</div></section></section><section><section>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<p>To counter this, for search phrases, we generate every possible Ngram, to given width, and drop all those never seen before (ie. not in our Ngram Datastore)</p>
+<p>eg: <code>Python Learning Examples SciKit Data Science</code> -&gt;</p>
+<p><code>[ TODO ]</code></p>
+
+</div>
+</div>
+</div></section></section><section><section>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Datastores">Datastores<a class="anchor-link" href="#Datastores">&#182;</a></h1>
+</div>
+</div>
+</div></section></section><section><section>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Config">Config<a class="anchor-link" href="#Config">&#182;</a></h3><p>Contains application wide baselines (eg. Instance UUID, Corpus Directory, Ngram width, Word2Vec Ngram Width) &amp; master keys (currently only last used <code>vector</code>)</p>
+<h3 id="Dictionary">Dictionary<a class="anchor-link" href="#Dictionary">&#182;</a></h3><p><code>word</code> to <code>vector</code> (<code>int</code>) mappings
+<code>vector</code> assigned sequentially when new <code>word</code> is found</p>
+<h3 id="Vector">Vector<a class="anchor-link" href="#Vector">&#182;</a></h3><p><code>vector</code>  (<code>int</code>) to <code>word</code> mappings</p>
+<h3 id="NGram">NGram<a class="anchor-link" href="#NGram">&#182;</a></h3><p>Per <code>ngram</code>, per <code>srcID</code> list of lines with Ngram</p>
+
+</div>
+</div>
+</div></section></section><section><section>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h3 id="Sources">Sources<a class="anchor-link" href="#Sources">&#182;</a></h3><p>Per Source Path (file path, URL etc) to <code>srcID</code> (UUID)
+Potential to add source has (ND5 or SHA1) to avoid duplicates</p>
+<h3 id="DocMeta-(Document-Meta)">DocMeta (Document Meta)<a class="anchor-link" href="#DocMeta-(Document-Meta)">&#182;</a></h3><p>Per <code>source</code> summary information, including type (URL, FILE, ...) and sub-type (HTML, PDF, TXT, CSV, ...), index status, Word2Vec status, <code>list</code> of ngrams, indexed data version, when indexed etc</p>
+<h3 id="DocStat-(Document-Statistics)">DocStat (Document Statistics)<a class="anchor-link" href="#DocStat-(Document-Statistics)">&#182;</a></h3><p>Per document (<code>srcID</code>), per line list of Ngrams</p>
+
+</div>
+</div>
+</div></section></section><section><section>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Algorithm---Index---Ngram">Algorithm - Index - Ngram<a class="anchor-link" href="#Algorithm---Index---Ngram">&#182;</a></h1>
+</div>
+</div>
+</div></section></section><section><section>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Algorithm---Word2Vec">Algorithm - Word2Vec<a class="anchor-link" href="#Algorithm---Word2Vec">&#182;</a></h1>
+</div>
+</div>
+</div></section></section><section><section>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Algorithm---Search">Algorithm - Search<a class="anchor-link" href="#Algorithm---Search">&#182;</a></h1>
+</div>
+</div>
+</div></section></section>
+</div>
+</div>
+
+<script>
+
+require(
+    {
+      // it makes sense to wait a little bit when you are loading
+      // reveal from a cdn in a slow connection environment
+      waitSeconds: 15
+    },
+    [
+      "reveal.js/lib/js/head.min.js",
+      "reveal.js/js/reveal.js"
+    ],
+
+    function(head, Reveal){
+
+        // Full list of configuration options available here: https://github.com/hakimel/reveal.js#configuration
+        Reveal.initialize({
+            controls: true,
+            progress: true,
+            history: true,
+
+            transition: "slide",
+
+            // Optional libraries used to extend on reveal.js
+            dependencies: [
+                { src: "reveal.js/lib/js/classList.js",
+                  condition: function() { return !document.body.classList; } },
+                { src: "reveal.js/plugin/notes/notes.js",
+                  async: true,
+                  condition: function() { return !!document.body.classList; } }
+            ]
+        });
+
+        var update = function(event){
+          if(MathJax.Hub.getAllJax(Reveal.getCurrentSlide())){
+            MathJax.Hub.Rerender(Reveal.getCurrentSlide());
+          }
+        };
+
+        Reveal.addEventListener('slidechanged', update);
+
+        function setScrollingSlide() {
+            var scroll = false
+            if (scroll === true) {
+              var h = $('.reveal').height() * 0.95;
+              $('section.present').find('section')
+                .filter(function() {
+                  return $(this).height() > h;
+                })
+                .css('height', 'calc(95vh)')
+                .css('overflow-y', 'scroll')
+                .css('margin-top', '20px');
+            }
+        }
+
+        // check and set the scrolling slide every time the slide change
+        Reveal.addEventListener('slidechanged', setScrollingSlide);
+
+    }
+
+);
+</script>
+
+</body>
 
 
 </html>

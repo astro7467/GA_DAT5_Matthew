@@ -28,6 +28,7 @@ import re
 import random
 import time
 import shelve
+import tempfile
 import uuid
 
 import numpy as np
@@ -37,7 +38,6 @@ import tensorflow as tf
 #from simple_shelve import SimpleShelf, SimpleMultiShelf
 
 from sklearn.feature_extraction.text import CountVectorizer #, TfidfVectorizer
-from tempfile import gettempdir
 
 _storeDocMeta_ngrams = True # Storage of ngram list in dbStores['docmeta'] per srcID
 
@@ -50,6 +50,266 @@ _logTrace = 4
 _logSysLevel = _logTrace
 #_logSysLevel = _logStatus
 
+# Tensorflow Word2Vec Model Training
+def tf_word2vec(dbStores, sysConfig, wordCount, vectorList):
+    dataIndex = 0
+    batch, labels, dataIndex = w2v_generate_batch(vectorList, dataIndex, batchSize=8, numSkips=2, skipWindow=1)
+    for i in range(8):
+        print(batch[i], dbStores['vectors']['vectors'][batch[i]],
+              '->', labels[i, 0], dbStores['vectors']['vectors'][labels[i, 0]])
+
+    # Build and train a skip-gram model.
+
+    batchSize = 128
+    embeddingSize = 128  # Dimension of the embedding vector.
+    skipWindow = 1       # How many words to consider left and right.
+    numSkips = 2         # How many times to reuse an input to generate a label.
+    numSampled = 64      # Number of negative examples to sample.
+    vocabularySize = len(dbStores['vectors']['vectors'].keys())
+
+    # We pick a random validation set to sample nearest neighbors. Here we limit the
+    # validation samples to the words that have a low numeric ID, which by
+    # construction are also the most frequent. These 3 variables are used only for
+    # displaying model accuracy, they don't affect calculation.
+    validSize = 16     # Random set of words to evaluate similarity on.
+    validWindow = 100  # Only pick dev samples in the head of the distribution.
+    validExamples = np.random.choice(validWindow, validSize, replace=False)
+
+
+    #graph = tf.Graph()
+    #with graph.as_default():
+    with tf.Session(graph=tf.Graph()) as session:
+
+        try:
+            tf.saved_model.loader.load(session, [tag_constants.TRAINING], './data/tfSavedModelBuilder')
+        except:
+            print 'No Model to load'
+        #yrt
+
+        # Input data.
+        trainInputs = tf.placeholder(tf.int32, shape=[batchSize])
+        trainLabels = tf.placeholder(tf.int32, shape=[batchSize, 1])
+        validDataset = tf.constant(validExamples, dtype=tf.int32)
+
+        # Ops and variables pinned to the GPU
+        # change to CPU if not on tensorflow-gpu with CDDN & CUDA support
+        with tf.device('/gpu:0'):
+            # Look up embeddings for inputs.
+            embeddings = tf.Variable(tf.random_uniform([vocabularySize, embeddingSize], -1.0, 1.0))
+            embed = tf.nn.embedding_lookup(embeddings, trainInputs)
+
+            # Construct the variables for the NCE loss
+            nceWeights = tf.Variable(tf.truncated_normal([vocabularySize, embeddingSize], stddev=1.0 / math.sqrt(embeddingSize)))
+            nceBiases = tf.Variable(tf.zeros([vocabularySize]))
+
+            # Compute the average NCE loss for the batch.
+            # tf.nce_loss automatically draws a new sample of the negative labels each
+            # time we evaluate the loss.
+            # Explanation of the meaning of NCE loss:
+            #   http://mccormickml.com/2016/04/19/word2vec-tutorial-the-skip-gram-model/
+            loss = tf.reduce_mean( tf.nn.nce_loss(weights=nceWeights, biases=nceBiases, labels=trainLabels, inputs=embed, num_sampled=numSampled, num_classes=vocabularySize))
+
+            # Construct the SGD optimizer using a learning rate of 1.0.
+            optimizer = tf.train.GradientDescentOptimizer(1.0).minimize(loss)
+
+            # Compute the cosine similarity between minibatch examples and all embeddings.
+            norm = tf.sqrt(tf.reduce_sum(tf.square(embeddings), 1, keep_dims=True))
+            normalizedEmbeddings = embeddings / norm
+            validEmbeddings = tf.nn.embedding_lookup( normalizedEmbeddings, validDataset )
+            similarity = tf.matmul( validEmbeddings, normalizedEmbeddings, transpose_b=True )
+
+            # Add variable initializer.
+            init = tf.global_variables_initializer()
+        #htiw
+    #htiw
+
+    builder = tf.saved_model.builder.SavedModelBuilder('./data/tfSavedModelBuilder')
+    with tf.Session(graph=tf.Graph()) as session:
+        builder.add_meta_graph_and_variables(session, [tf.saved_model.tag_constants.TRAINING] )
+    builder.save()
+
+    # Begin training.
+    num_steps = 100001
+
+    #with tf.Session(graph=graph) as session:
+    with tf.Session(graph=tf.Graph()) as session:
+        # We must initialize all variables before we use them.
+        init.run()
+        print('Initialized')
+
+        try:
+            tf.saved_model.loader.load(session, [tag_constants.TRAINING], './data/tfSavedModelBuilder')
+        except:
+            print 'No Model to load'
+        #yrt
+
+        averageLoss = 0
+        for step in xrange(numSteps):
+            batchInputs, batchLabels, dataIndex = w2v_generate_batch( vectorList, dataIndex, batchSize, numSkips, skipWindow)
+            feedDict = {trainInputs: batchInputs, trainLabels: batchLabels}
+
+            # We perform one update step by evaluating the optimizer op (including it
+            # in the list of returned values for session.run()
+            _, lossVal = session.run([optimizer, loss], feed_dict=feedDict)
+            averageLoss += lossVal
+
+            if step % 2000 == 0:
+                if step > 0:  averageLoss /= 2000
+
+                # The average loss is an estimate of the loss over the last 2000 batches.
+                print('Average loss at step ', step, ': ', averageLoss)
+                averageLoss = 0
+            #if
+
+            # Note that this is expensive (~20% slowdown if computed every 500 steps)
+            if step % 10000 == 0:
+                sim = similarity.eval()
+                for i in xrange(validSize):
+                    validWord = dbStores['vectors']['vectors'][validExamples[i]]
+                    topK = 8  # number of nearest neighbors
+                    nearest = (-sim[i, :]).argsort()[1:topK + 1]
+                    logStr = 'Nearest to %s:' % validWord
+                    for k in xrange(topK):
+                        closeWord = dbStores['vectors']['vectors'][nearest[k]]
+                        logStr = '%s %s,' % (logStr, closeWord)
+                    #rof
+                    print(logStr)
+                #rof
+            #fi
+        #rof
+        finalEmbeddings = normalizedEmbeddings.eval()
+    #htiw
+
+    builder = tf.saved_model.builder.SavedModelBuilder('./data/tfSavedModelBuilder')
+    with tf.Session(graph=tf.Graph()) as session:
+        builder.add_meta_graph_and_variables(session, [tf.saved_model.tag_constants.TRAINING] )
+    builder.save()
+    return
+#def
+
+# Function to generate a training batch for the skip-gram model.
+def w2v_generate_batch(vectorList, dataIndex, batchSize, numSkips, skipWindow):
+    assert batchSize % numSkips == 0
+    assert numSkips <= 2 * skipWindow
+    batch = np.ndarray(shape=(batchSize), dtype=np.int32)
+    labels = np.ndarray(shape=(batchSize, 1), dtype=np.int32)
+    span = 2 * skipWindow + 1  # [ skipWindow target skipWindow ]
+    buffer = collections.deque(maxlen=span)
+    if dataIndex + span > len(data):
+        dataIndex = 0
+    buffer.extend(vectorList[dataIndex:dataIndex + span])
+    dataIndex += span
+    for i in range(batchSize // numSkips):
+        contextWords = [w for w in range(span) if w != skipWindow]
+        random.shuffle(contextWords)
+        wordsToUse = collections.deque(contextWords)
+        for j in range(numSkips):
+            batch[i * numSkips + j] = buffer[skipWindow]
+            contextWord = wordsToUse.pop()
+            labels[i * numSkips + j, 0] = buffer[contextWord]
+        if dataIndex == len(vectorList):
+            buffer[:] = vectorList[:span]
+            dataIndex = span
+        else:
+            buffer.append(vectorList[dataIndex])
+            dataIndex += 1
+    # Backtrack a little bit to avoid skipping words in the end of a batch
+    dataIndex = (dataIndex + len(vectorList) - span) % len(vectorList)
+    return batch, labels, dataIndex
+#def
+
+# Take a file and produces a temporary normalised file
+def normalise_file(dbStores, sysConfg, fileName, tempDir):
+    tempFile = os.path.join(tempDir, fileName)
+
+    trace_log( _logSysLevel, _logTrace, {'tempDir':tempDir, 'tempFile':tempFile, 'Filename':fileName}, context='Normalised File Start')
+
+    writeFile = open(tempFile, 'w+t')
+    try:
+        normalisedText = normalise_text(fileName)
+        if not normalisedText in [None, '', ' ']:
+            writeFile.write(normalisedText + ' ')
+        #fi
+
+        with open( fileName, mode = 'rU' ) as readFile:
+            # read each line, normalise it, and send to temp file
+            for line in readFile:
+                normalisedText = normalise_text(line)
+                if not normalisedText in [None, '', ' ']:
+                    writeFile.write(normalisedText + ' ')
+                #fi
+            #rof
+        #htiw
+    finally:
+        writeFile.close()
+    #yrt
+
+    trace_log( _logSysLevel, _logTrace, {'tempDir':tempDir, 'tempFile':tempFile, 'Filename':fileName}, context='Normalised File Finished')
+
+    return tempFile
+#fed
+
+# Count occurances of words & Convert (normalised) file from words to list of vectors
+def vector_word_count_file(dbStores, sysConfg, normFile):
+    wordCount = list()
+    vectorList = list()
+    counter = collections.Counter()
+
+    trace_log( _logSysLevel, _logInfo, {'Filename':normFile}, context='Starting WordCount & Vectorize List...')
+
+    with open( normFile, mode = 'rU' ) as readFile:
+        # read each line, count each word & append to vector list as vectors
+        for line in readFile:
+            counter.update(line)
+            for word in line.split():
+                try:
+                    vectorList.append(dbStores['dict'][word])
+                except:
+                    trace_log( _logSysLevel, _logInfo, {'Filename':normFile, 'word':word}, context='Building Vector List - Word not in Dictionary')
+                    dict_parse_words(dbStores, sysConfig, line, xcheck=True)
+                    vectorList.append(dbStores['dict'][word])
+                #yrt
+            #rof
+        #rof
+    #htiw
+
+    wordCount.extend(counter)
+
+    trace_log( _logSysLevel, _logTrace, wordCount[:50], context='Producted wordCount')
+    trace_log( _logSysLevel, _logTrace, vectorList[:100], context='Producted vectorList')
+    trace_log( _logSysLevel, _logInfo, {'Filename':normFile}, context='Finished WordCount & Vectorize Lists')
+
+    return wordCount, vectorList
+#def
+
+# Takes a given document, and returns a list with the document vectorized,
+# and counts for each word
+def vector_file(dbStores, sysConfg, fileList):
+    tempDir = tempfile.mkdtemp()
+
+    for fileName in fileList:
+        trace_log( _logSysLevel, _logTrace, {'Filename':fileName}, context='Vector File Examining')
+
+        # Build a individual File Breakdown ngrams
+        srcID = uuid_source(dbStores, sysConfig, srcCat + ':' + srcSubCat + ':' + fileName)
+        init_source(dbStores, srcID, fileName, srcCat, srcSubCat)
+
+        if not dbStores['docmeta'][srcID].has_key('word2vec'):
+            dbStores['docmeta'][srcID]['word2vec'] = False
+        #fi
+
+        if not dbStores['docmeta'][srcID]['word2vec']:
+            normFile = normalise_file(dbStores, sysConfg, fileName, tempDir)
+            wordCount, vectorList = vector_word_count_file(dbStores, sysConfg, normFile)
+            #tf_word2vec(dbStores, sysConfig, wordCount, vectorList)
+            #dbStores['docmeta'][srcID]['word2vec'] = True
+            trace_log( _logSysLevel, _logInfo, {'SrcID':srcID, 'Filename':fileName, 'Normalised Filename':normFile}, context='Vector File Finished')
+        #fi
+    #rof
+    #os.removedirs(tempDir)
+    return
+#fed
+
 # increment vector available and return
 def dictionary_vector(dbStores):
     dbStores['config']['nextvector'] += 1
@@ -60,62 +320,70 @@ def dictionary_vector(dbStores):
 # Parse a given word list, add to dictionary & vectors if new
 def dict_parse_words(dbStores, sysConfig, words, xcheck=False):
     # reduce to unique words
-    words = set(words)
+    wordList = set(words)
 
     #if not dbStores['vectdict'].has_key('dict'): dbStores['vectdict']['dict'] = dict()
     #if not dbStores['vectdict'].has_key('vect'): dbStores['vectdict']['vect'] = dict()
 
     # find words not already in dictionary, and add them to dict & vectors
-    for word in words:
+    for word in wordList:
         if not dbStores['dict'].has_key(word):
             vector = dictionary_vector(dbStores)
-            dbStores['dict'][word] = vector
-            dbStores['vector'][vector] = word
 
+            dbStores['dict'][word] = vector
             dbStores['dict'].sync()
+
+            dbStores['vectors']['vectors'][vector] = word
             dbStores['vectors'].sync()
 
-            trace_log( _logSysLevel, _logTrace, {word: vector}, context='Added to Dictionary')
+            trace_log( _logSysLevel, _logTrace, {word:dbStores['dict'][word], vector:dbStores['vectors']['vectors'][vector]}, context='Dictionary New Word: Vector')
         #fi
+
         if xcheck:
+            if not dbStores['vectors']['vectors'].has_key(dbStores['dict'][word]):
+                # Missing Vector -> Word
+                vector = dbStores['dict'][word]
+                dbStores['vectors']['vectors'][vector] = word
+
+                dbStores['dict'].sync()
+                dbStores['vectors'].sync()
+
+                trace_log( _logSysLevel, _logStatus, {word: vector}, context='Dictionary Fixed - Missing Vector Key')
+            #fi
+
             if not isinstance(dbStores['dict'][word], int):
                 # found an invalid vector word/vector pair???
                 vector = dictionary_vector(dbStores)
                 dbStores['dict'][word] = vector
-                dbStores['vector'][vector] = word
+                dbStores['vectors']['vectors'][vector] = word
 
                 dbStores['dict'].sync()
                 dbStores['vectors'].sync()
 
-                trace_log( _logSysLevel, _logStatus, {word: vector}, context='Fixed Dictionary - Bad Vector')
+                trace_log( _logSysLevel, _logStatus, {word: vector}, context='Dictionary Fixed - Bad Vector')
             #fi
 
-            if not dbStores['vector'].has_key(dbStores['dict'][word]):
-                # Missing Vector -> Word
-                dbStores['vector'][dbStores['dict'][word]] = word
-
-                dbStores['dict'].sync()
-                dbStores['vectors'].sync()
-
-                trace_log( _logSysLevel, _logStatus, {word: vector}, context='Fixed Dictionary - Missing Vector Key')
-            #fi
-
-            if not dbStores['vector'][dbStores['dict'][word]] == word:
+            if not dbStores['vectors']['vectors'][dbStores['dict'][word]] == word:
                 # found an invalid word->vector->word???
-                oldword = dbStores['vector'][dbStores['dict'][word]]
+                oldword = dbStores['vectors']['vectors'][dbStores['dict'][word]]
 
                 # fix current word & vector maps
-                dbStores['vector'][dbStores['dict'][word]] = word
+                currVector = dbStores['dict'][word]
+                dbStores['vectors']['vectors'][currVector] = word
 
                 # assign new vector to oldword
-                vector = dictionary_vector(dbStores)
-                dbStores['dict'][oldword] = vector
-                dbStores['vector'][vector] = oldword
+                newVector = dictionary_vector(dbStores)
+                dbStores['dict'][oldword] = newVector
+                dbStores['vectors']['vectors'][newVector] = oldword
 
                 dbStores['dict'].sync()
                 dbStores['vectors'].sync()
 
-                trace_log( _logSysLevel, _logStatus, {word: dbStores['dict'][word], oldword: vector}, context='Fixed Dictionary - Bad X Vector')
+                trace_log( _logSysLevel, _logStatus, {word: dbStores['dict'][word], oldword: newVector}, context='Dictionary Fixed - Bad X Vector')
+            #fi
+
+            if not normalise_text(word) == word:
+                trace_log( _logSysLevel, _logStatus, {word: dbStores['dict'][word], dbStores['dict'][word]: dbStores['vectors']['vectors'][dbStores['dict'][word]]}, context='Dictionary Warning - Word Failed Normalised Scan')
             #fi
         #fi
     #rof
@@ -133,7 +401,7 @@ def validate_dict():
     total = len(dbStores['dict'].keys())
 
     trace_log( _logSysLevel, _logStatus, 'Checking Vector...')
-    minVector = max(dbStores['vector'].keys())
+    minVector = max(dbStores['vectors']['vectors'].keys())
     vector = dictionary_vector(dbStores)
 
     if vector <= minVector:
@@ -152,27 +420,9 @@ def validate_dict():
         count += 1
     #rof
     trace_log( _logSysLevel, _logStatus, 'Number of keys Dict: ' + str(len(dbStores['dict'].keys())) )
-    trace_log( _logSysLevel, _logStatus, 'Number of keys Vect: ' + str(len(dbStores['vector'].keys())) )
+    trace_log( _logSysLevel, _logStatus, 'Number of keys Vect: ' + str(len(dbStores['vectors']['vectors'].keys())) )
     print line
     close_datastores(dbStores)
-#def
-
-def w2v_build_dataset(words):
-    #Process raw inputs into a dataset ready for word2vec
-    count = [['UNK', -1]]
-    count.extend(collections.Counter(words).most_common(n_words - 1))
-    dictionary = dict()
-    for word, _ in count: dictionary[word] = len(dictionary)
-    data = list()
-    unk_count = 0
-    for word in words:
-        index = dictionary.get(word, 0)
-        if index == 0:  # dictionary['UNK']
-            unk_count += 1
-        data.append(index)
-    count[0][1] = unk_count
-    reversed_dictionary = dict(zip(dictionary.values(), dictionary.keys()))
-    return data, count, dictionary, reversed_dictionary
 #def
 
 # Common Logging/Trace Routine
@@ -336,8 +586,7 @@ def calc_matches(dbStores, ngramList, maxResults=12):
     topSrcInfo = {}
     for srcID, WeightedScore in sorted(srcWeightedScore.iteritems(), reverse=True, key=lambda (k,v): (v,k)):
         topSrcMatches.append(srcID)
-        topSrcInfo[srcID] = {'score': WeightedScore,
-                             'ngrams': len(srcNgramCounts[srcID])}
+        topSrcInfo[srcID] = {'score': WeightedScore, 'ngrams': len(srcNgramCounts[srcID])}
     #rof
 
     trace_log( _logSysLevel, _logInfo, topSrcMatches, context='topSrcMatches')
@@ -347,7 +596,7 @@ def calc_matches(dbStores, ngramList, maxResults=12):
 
 # Normalize Text Convert text to lower-case and strip punctuation/symbols from words
 def normalise_text(text):
-    norm_text = text.lower()
+    norm_text = str(text).lower()
 
     # remove apostrophe in words: [alpha]'[alpha]=[alpha][alpha] eg. don't = dont
     norm_text = re.sub(r'([\w]+)[\`\']([\w]+)', r'\1\2', norm_text)
@@ -355,11 +604,11 @@ def normalise_text(text):
     # Replace non-AlphaNumeric sequences with Space
     norm_text = re.sub(r'[^\w]+', r' ', norm_text)
 
-    # Replace spaces, underscores, tabs, newlines and returns with a space
+    # Replace spaces, underscores, tabs, newlines and return sequences with a space
     norm_text = re.sub(r'[ _\t\n\r]+', r' ', norm_text)
 
     # Replace pure digits with space eg 1234, but not 4u or best4u
-    norm_text = re.sub(r'^\d+\W+|\W+\d+\W+|\W+\d+$', r' ', norm_text)
+    norm_text = re.sub(r'^\d+$|^\d+\W+|\W+\d+\W+|\W+\d+$', r' ', norm_text)
 
     return norm_text.strip(' _\t\n\r')
 #fed
@@ -397,9 +646,10 @@ def open_datastores():
     dbStores['vectors'] = shelve.open('data/vectors', writeback=True)
 
     # As shelves mandates str for keys, we create a dict inside with int keys for vectors
-    # open()/close()/sync() need to occur against 'vectors' not vector
-    if not dbStores['vectors'].has_key('vectors'): dbStores['vectors']['vectors'] = dict()
-    dbStores['vector'] = dbStores['vectors']['vectors']
+    # open()/close()/sync() need to occur against 'vectors' not ['vectors]['vectors']
+    if not dbStores['vectors'].has_key('vectors'):
+        dbStores['vectors']['vectors'] = dict()
+    #fi
 
     trace_log( _logSysLevel, _logInfo, 'Finished Opening dbStores')
 
@@ -409,11 +659,9 @@ def open_datastores():
 # Close/Cleanup datastores
 def close_datastores(dbStores):
     for fileHandle in dbStores.keys():
-        if not fileHandle == 'vector':
-            dbStores[fileHandle].sync()
-            dbStores[fileHandle].close()
-            trace_log( _logSysLevel, _logInfo, 'Closed dbStore: ' + fileHandle)
-        #fi
+        dbStores[fileHandle].sync()
+        dbStores[fileHandle].close()
+        trace_log( _logSysLevel, _logInfo, 'Closed dbStore: ' + fileHandle)
     #rof
     return
 #fed
@@ -611,6 +859,10 @@ def index_file_txt(dbStores, sysConfig, fileList, srcCat, srcSubCat):
         # Build a individual File Breakdown ngrams
         srcID = uuid_source(dbStores, sysConfig, srcCat + ':' + srcSubCat + ':' + fileName)
         init_source(dbStores, srcID, fileName, srcCat, srcSubCat)
+
+        if not dbStores['docmeta'][srcID].has_key('indexed'):
+            dbStores['docmeta'][srcID]['indexed'] = False
+        #fi
 
         if not dbStores['docmeta'][srcID]['indexed']:
             lineID = 0

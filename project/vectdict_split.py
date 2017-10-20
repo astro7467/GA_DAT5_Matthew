@@ -20,9 +20,9 @@ def bld_vect():
     dbStores = swi.open_datastores()
     sysConfig = swi.sys_config(dbStores)
     print 'Building new dictionary...'
-    dbStores['vector'].update(dict(zip(dbStores['vectdict']['dict'].values(), dbStores['vectdict']['dict'].keys())))
+    dbStores['vectors']['vectors'].update(dict(zip(dbStores['vectdict']['dict'].values(), dbStores['vectdict']['dict'].keys())))
     dbStores['vectors'].sync()
-    print 'Number of keys produced:', len(dbStores['vector'].keys())
+    print 'Number of keys produced:', len(dbStores['vectors']['vectors'].keys())
     print line
     swi.close_datastores(dbStores)
 
@@ -39,6 +39,7 @@ def bld_dict():
     swi.close_datastores(dbStores)
 
 def validate_dict():
+    line = '-' * 80
     print line
     swi.trace_log( _logSysLevel, _logStatus, 'Validating Dictionary...')
     dbStores = swi.open_datastores()
@@ -47,7 +48,7 @@ def validate_dict():
     total = len(dbStores['dict'].keys())
 
     swi.trace_log( _logSysLevel, _logStatus, 'Checking Vector...')
-    minVector = max(dbStores['vector'].keys())
+    minVector = max(dbStores['vectors']['vectors'].keys())
     vector = swi.dictionary_vector(dbStores)
 
     if vector <= minVector:
@@ -66,7 +67,7 @@ def validate_dict():
         count += 1
     #rof
     swi.trace_log( _logSysLevel, _logStatus, 'Number of keys Dict: ' + str(len(dbStores['dict'].keys())) )
-    swi.trace_log( _logSysLevel, _logStatus, 'Number of keys Vect: ' + str(len(dbStores['vector'].keys())) )
+    swi.trace_log( _logSysLevel, _logStatus, 'Number of keys Vect: ' + str(len(dbStores['vectors']['vectors'].keys())) )
     print line
     swi.close_datastores(dbStores)
 #def
