@@ -40,6 +40,7 @@ TODOS / Full Product Considerations:
 
 import swi_lib as swi
 import getopt
+import random
 import os
 import sys
 
@@ -52,13 +53,105 @@ _logSysLevel = _logTrace
 
 dataSpecVer = 0.1 # Min data spec version expected & used
 
-#Search for string in index
+# Provide some insight to the datastores
+def system_analyse():
+    dbStores = swi.open_datastores()
+    sysConfig = swi.sys_config(dbStores)
+
+    line = '-' * 80
+
+    print line
+    print 'Config File Info'
+    print line
+    print 'Config Record Count:', len(dbStores['config'].keys())
+    swi.trace_log(_logConfig, _logStatus, sysConfig, 'Config Key & Value Pairs')
+
+    dictVector = max(dbStores['dict'].values())
+    vecVector = max(dbStores['vector'].keys())
+    vector = swi.dictionary_vector(dbStores)
+    print 'Vector Trace: Highest Dictionary / Highest Vectors / Current Counter', dictVector, '/', vecVector, '/', vector
+
+    print line
+    print 'DocMeta File Info'
+    print line
+    print 'DocMeta Record Count:', len(dbStores['docmeta'].keys())
+    print 'Ten Random Samples:'
+    keyList = list( dbStores['docmeta'].keys() )
+    random.shuffle(keyList)
+    for key in keyList[:10]:
+        swi.trace_log(_logConfig, _logStatus, dbStores['docmeta'][key], 'DocMeta ' + key)
+    #rof
+
+    print line
+    print 'DocStat File Info'
+    print line
+    print 'DocStat Record Count:', len(dbStores['docstat'].keys())
+    print 'Ten Random Samples:'
+    keyList = list( dbStores['docstat'].keys() )
+    random.shuffle(keyList)
+    for key in keyList[:10]:
+        swi.trace_log(_logConfig, _logStatus, dbStores['docstat'][key], 'DocStat ' + key)
+    #rof
+
+    print line
+    print 'Ngram File Info'
+    print line
+    print 'Ngram Record Count:', len(dbStores['ngram'].keys())
+    print 'Ten Random Samples:'
+    keyList = list( dbStores['ngram'].keys() )
+    random.shuffle(keyList)
+    for key in keyList[:10]:
+        swi.trace_log(_logConfig, _logStatus, dbStores['ngram'][key], 'Ngram ' + key)
+    #rof
+
+    print line
+    print 'Sources File Info'
+    print line
+    print 'Sources Record Count:', len(dbStores['sources'].keys())
+    print 'Ten Random Samples:'
+    keyList = list( dbStores['sources'].keys() )
+    random.shuffle(keyList)
+    for key in keyList[:10]:
+        swi.trace_log(_logConfig, _logStatus, dbStores['sources'][key], 'Source ' + key)
+    #rof
+
+    print line
+    print 'Dictionary & Vector File Info'
+    print line
+    print 'Dictionary & Vector Key Counts (Should be Equal):', len(dbStores['dict'].keys()), '/', len(dbStores['vector'].keys())
+    print 'Dictionary & Vectors (inc Validation) (word->vector->word):'
+    keyList = list( dbStores['dict'].keys() )
+    random.shuffle(keyList)
+    for key in keyList[:10]:
+        print key, '(word) ->', dbStores['dict'][key], '(vector) ->', dbStores['vector'][dbStores['dict'][key]], '(word)'
+        swi.dict_parse_words(dbStores, sysConfig, [key], xcheck=True)
+    #rof
+
+    print line
+    print 'Vector & Dictionary (inc Validation) (vector->word->vector):'
+    print line
+    keyList = list( dbStores['vector'].keys() )
+    random.shuffle(keyList)
+    for key in keyList[:10]:
+        print key, '(vector) ->', dbStores['vector'][key], '(word) ->', dbStores['dict'][dbStores['vector'][key]], '(vector)'
+        swi.dict_parse_words(dbStores, sysConfig, [dbStores['vector'][key]], xcheck=True)
+    #rof
+
+    print line
+
+    swi.close_datastores(dbStores)
+#fed
+
+# Search for string in index
 def search(searchText):
     dbStores = swi.open_datastores()
     sysConfig = swi.sys_config(dbStores)
 
     searchText = swi.normalise_text(searchText)
     words = sorted(list(set(searchText.split())))
+
+    swi.dict_parse_words(dbStores, sysConfig, words)
+
     ngramList = swi.build_ngrams(words, sysConfig['ngram'])
 
     swi.trace_log( _logSysLevel, _logConfig, sysConfig, context='sysConfig')
@@ -120,7 +213,7 @@ def index_files():
 
 # Parse commandline options
 def main(argv):
-    helpText = 'USAGE: SearchWithInference.py <[-h|--help]|[-i|--index]|[-s|--search|--find] text>'
+    helpText = 'USAGE: SearchWithInference.py <[-h|--help]|[-a|--analyse|--stats][-i|--index]|[-s|--search|--find] text>'
 
     if len(argv) == 0:
         print helpText
@@ -128,7 +221,7 @@ def main(argv):
     #fi
 
     try:
-        opts, args = getopt.getopt(argv,"his:",["help","index","search="])
+        opts, args = getopt.getopt(argv,"ahis:",["analyse", "analysis", "analyze", "help", "index", "search=", "stats", "statistics"])
     except getopt.GetoptError:
         print helpText
         print
@@ -146,6 +239,9 @@ def main(argv):
         elif opt in ("-s", "--search", '--find'):
             swi.trace_log( _logSysLevel, _logInfo, 'Arg - Search')
             search(arg)
+        elif opt in ("-a", "--analyse", "--analysis", "--analyze", "--stats", "--statistics"):
+            swi.trace_log( _logSysLevel, _logInfo, 'Arg - Statistics')
+            system_analyse()
         #fi
     #rof
     return

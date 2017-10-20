@@ -20,16 +20,25 @@
 
 """
 
+import collections
 import itertools
 import math
+import os
 import re
+import random
 import time
 import shelve
 import uuid
 
-from sklearn.feature_extraction.text import CountVectorizer #, TfidfVectorizer
+import numpy as np
+import tensorflow as tf
 
-_trace = True # enable increased data reporting
+#from pathlib import Path
+#from simple_shelve import SimpleShelf, SimpleMultiShelf
+
+from sklearn.feature_extraction.text import CountVectorizer #, TfidfVectorizer
+from tempfile import gettempdir
+
 _storeDocMeta_ngrams = True # Storage of ngram list in dbStores['docmeta'] per srcID
 
 # Current Suggested Global Variables for use with traceLog
@@ -40,6 +49,131 @@ _logInfo = 3
 _logTrace = 4
 _logSysLevel = _logTrace
 #_logSysLevel = _logStatus
+
+# increment vector available and return
+def dictionary_vector(dbStores):
+    dbStores['config']['nextvector'] += 1
+    dbStores['config'].sync()
+    return dbStores['config']['nextvector']
+#fed
+
+# Parse a given word list, add to dictionary & vectors if new
+def dict_parse_words(dbStores, sysConfig, words, xcheck=False):
+    # reduce to unique words
+    words = set(words)
+
+    #if not dbStores['vectdict'].has_key('dict'): dbStores['vectdict']['dict'] = dict()
+    #if not dbStores['vectdict'].has_key('vect'): dbStores['vectdict']['vect'] = dict()
+
+    # find words not already in dictionary, and add them to dict & vectors
+    for word in words:
+        if not dbStores['dict'].has_key(word):
+            vector = dictionary_vector(dbStores)
+            dbStores['dict'][word] = vector
+            dbStores['vector'][vector] = word
+
+            dbStores['dict'].sync()
+            dbStores['vectors'].sync()
+
+            trace_log( _logSysLevel, _logTrace, {word: vector}, context='Added to Dictionary')
+        #fi
+        if xcheck:
+            if not isinstance(dbStores['dict'][word], int):
+                # found an invalid vector word/vector pair???
+                vector = dictionary_vector(dbStores)
+                dbStores['dict'][word] = vector
+                dbStores['vector'][vector] = word
+
+                dbStores['dict'].sync()
+                dbStores['vectors'].sync()
+
+                trace_log( _logSysLevel, _logStatus, {word: vector}, context='Fixed Dictionary - Bad Vector')
+            #fi
+
+            if not dbStores['vector'].has_key(dbStores['dict'][word]):
+                # Missing Vector -> Word
+                dbStores['vector'][dbStores['dict'][word]] = word
+
+                dbStores['dict'].sync()
+                dbStores['vectors'].sync()
+
+                trace_log( _logSysLevel, _logStatus, {word: vector}, context='Fixed Dictionary - Missing Vector Key')
+            #fi
+
+            if not dbStores['vector'][dbStores['dict'][word]] == word:
+                # found an invalid word->vector->word???
+                oldword = dbStores['vector'][dbStores['dict'][word]]
+
+                # fix current word & vector maps
+                dbStores['vector'][dbStores['dict'][word]] = word
+
+                # assign new vector to oldword
+                vector = dictionary_vector(dbStores)
+                dbStores['dict'][oldword] = vector
+                dbStores['vector'][vector] = oldword
+
+                dbStores['dict'].sync()
+                dbStores['vectors'].sync()
+
+                trace_log( _logSysLevel, _logStatus, {word: dbStores['dict'][word], oldword: vector}, context='Fixed Dictionary - Bad X Vector')
+            #fi
+        #fi
+    #rof
+    dbStores['dict'].sync()
+    dbStores['vectors'].sync()
+#def
+
+# Step through Dictionary and validate Vector Mappings
+def validate_dict():
+    print line
+    trace_log( _logSysLevel, _logStatus, 'Validating Dictionary...')
+    dbStores = open_datastores()
+    sysConfig = sys_config(dbStores)
+    count = 0
+    total = len(dbStores['dict'].keys())
+
+    trace_log( _logSysLevel, _logStatus, 'Checking Vector...')
+    minVector = max(dbStores['vector'].keys())
+    vector = dictionary_vector(dbStores)
+
+    if vector <= minVector:
+        oldVector = vector
+        dbStores['config']['nextvector'] = minVector + 1
+        dbStores['config'].sync()
+        vector = dictionary_vector(dbStores)
+        trace_log( _logSysLevel, _logStatus, {'OldVector': oldVector, 'NewVector': vector, 'MinVector': minVector}, context='Bad Next Vector Found')
+    #fi
+
+    for word in list(dbStores['dict'].keys()):
+        dict_parse_words(dbStores, sysConfig, [word], xcheck=True)
+        if count % 100 == 0:
+            trace_log( _logSysLevel, _logStatus, 'Progress: ' + str(count).rjust(len(str(total))+1) + ' of ' + str(total) + ' Last Vector: ' + str(dbStores['config']['nextvector']) + ' - ' + word)
+        #fi
+        count += 1
+    #rof
+    trace_log( _logSysLevel, _logStatus, 'Number of keys Dict: ' + str(len(dbStores['dict'].keys())) )
+    trace_log( _logSysLevel, _logStatus, 'Number of keys Vect: ' + str(len(dbStores['vector'].keys())) )
+    print line
+    close_datastores(dbStores)
+#def
+
+def w2v_build_dataset(words):
+    #Process raw inputs into a dataset ready for word2vec
+    count = [['UNK', -1]]
+    count.extend(collections.Counter(words).most_common(n_words - 1))
+    dictionary = dict()
+    for word, _ in count: dictionary[word] = len(dictionary)
+    data = list()
+    unk_count = 0
+    for word in words:
+        index = dictionary.get(word, 0)
+        if index == 0:  # dictionary['UNK']
+            unk_count += 1
+        data.append(index)
+    count[0][1] = unk_count
+    reversed_dictionary = dict(zip(dictionary.values(), dictionary.keys()))
+    return data, count, dictionary, reversed_dictionary
+#def
 
 # Common Logging/Trace Routine
 def trace_log(sysLogLevel, logType, logData, context=''):
@@ -55,16 +189,16 @@ def trace_log(sysLogLevel, logType, logData, context=''):
 
     if logType <= sysLogLevel:
         logText = time.strftime("%Y-%m-%d %H:%M:%S UTC%Z  ") + logTypes[logType].ljust(8)
+        newLinePrefix = ' ' * len(logText)
         if context <> '': logText += str(context) + '; '
 
-        newLinePrefix = ' ' * len(logText)
         # if context <> '': newLinePrefix += ' ' + context
 
         logTextList = []
         maxLineLen = 120
 
         if ( isinstance(logData, str) or isinstance(logData, int) or isinstance(logData, float) ):
-            logTextList = [logText + str(logData).strip()]
+            logTextList = [logText + str(logData).strip()[:120]]
         elif ( isinstance(logData, list) or isinstance(logData, tuple)):
             firstItem = True
             for item in logData:
@@ -75,7 +209,7 @@ def trace_log(sysLogLevel, logType, logData, context=''):
                         logText = newLinePrefix
                     #fi
                 #fi
-                logText += str(item).strip()
+                logText += str(item).strip()[:120]
                 firstItem = False
             #rof
             logTextList += [str(logText)]
@@ -89,8 +223,9 @@ def trace_log(sysLogLevel, logType, logData, context=''):
                         logText = newLinePrefix
                     #fi
                 #fi
-                logText += str(key).strip() + ': ' + str(logData[key]).strip()
+                logText += str(key).strip() + ': ' + str(logData[key]).strip()[:120]
                 firstItem = False
+                if len(logTextList) > 10: break
             #rof
             logTextList += [str(logText)]
         #fi
@@ -215,40 +350,77 @@ def normalise_text(text):
     norm_text = text.lower()
 
     # remove apostrophe in words: [alpha]'[alpha]=[alpha][alpha] eg. don't = dont
-    norm_text = re.sub(r'([\w]+)\'([\w]+)', r'\1\2', norm_text)
+    norm_text = re.sub(r'([\w]+)[\`\']([\w]+)', r'\1\2', norm_text)
 
     # Replace non-AlphaNumeric sequences with Space
     norm_text = re.sub(r'[^\w]+', r' ', norm_text)
 
     # Replace spaces, underscores, tabs, newlines and returns with a space
-    return re.sub(r'[ _\t\n\r]+', r' ', norm_text).strip(' _\t\n\r')
+    norm_text = re.sub(r'[ _\t\n\r]+', r' ', norm_text)
+
+    # Replace pure digits with space eg 1234, but not 4u or best4u
+    norm_text = re.sub(r'^\d+\W+|\W+\d+\W+|\W+\d+$', r' ', norm_text)
+
+    return norm_text.strip(' _\t\n\r')
 #fed
 
 ### Open Datastores and return handles
 # TODO: Serperate W/R opens from RO opens
 def open_datastores():
-    dbStores = {}
-    # Config Datastore
-    dbStores['config'] = shelve.open('data/config.db', writeback=True)
 
-    # Ngram Datastore (Core index)
-    dbStores['ngram'] = shelve.open('data/ngram.db', writeback=True)
+    dbStores = dict()
+
+    trace_log( _logSysLevel, _logInfo, 'Started Opening dbStores...')
+
+    # Config Datastore
+    dbStores['config'] = shelve.open('data/config', writeback=True)
+
+    # Dictionary to Vectore Datastore
+    dbStores['dict'] = shelve.open('data/dictionary', writeback=True)
 
     # Document Meta Data Datastore
-    dbStores['docmeta'] = shelve.open('data/docmeta.db', writeback=True)
+    dbStores['docmeta'] = shelve.open('data/docmeta', writeback=True)
 
     # Document Stats (file ngrams) Datastore
-    dbStores['docstat'] = shelve.open('data/docstat.db', writeback=True)
+    dbStores['docstat'] = shelve.open('data/docstat', writeback=True)
+
+    # Ngram Datastore (Core index)
+    dbStores['ngram'] = shelve.open('data/ngram', writeback=True)
 
     #file Type/Path to UUID Datastore
-    dbStores['sources'] = shelve.open('data/sources.db', writeback=True)
+    dbStores['sources'] = shelve.open('data/sources', writeback=True)
+
+    # (Original) Vector to Dictionary Datastore
+    # dbStores['vectdict'] = shelve.open('data/vectdict', writeback=True)
+
+    # Vector to Dictionary Datastore
+    dbStores['vectors'] = shelve.open('data/vectors', writeback=True)
+
+    # As shelves mandates str for keys, we create a dict inside with int keys for vectors
+    # open()/close()/sync() need to occur against 'vectors' not vector
+    if not dbStores['vectors'].has_key('vectors'): dbStores['vectors']['vectors'] = dict()
+    dbStores['vector'] = dbStores['vectors']['vectors']
+
+    trace_log( _logSysLevel, _logInfo, 'Finished Opening dbStores')
 
     return dbStores
 #fed
 
+# Close/Cleanup datastores
+def close_datastores(dbStores):
+    for fileHandle in dbStores.keys():
+        if not fileHandle == 'vector':
+            dbStores[fileHandle].sync()
+            dbStores[fileHandle].close()
+            trace_log( _logSysLevel, _logInfo, 'Closed dbStore: ' + fileHandle)
+        #fi
+    #rof
+    return
+#fed
+
 # UUID Management
 def sys_config(dbStores):
-    sysConfig = {}
+    sysConfig = dict()
 
     try:
         sysConfig['uuid'] = dbStores['config']['uuid']
@@ -272,13 +444,30 @@ def sys_config(dbStores):
     #yrt
 
     try:
+        sysConfig['word2vec'] = dbStores['config']['word2vec']
+    except:
+        dbStores['config']['word2vec'] = 5
+        sysConfig['word2vec'] = dbStores['config']['word2vec']
+    #yrt
+
+    # try:
+    #     sysConfig['nextvector'] = dbStores['config']['nextvector']
+    # except:
+    #     dbStores['config']['nextvector'] = 0
+    #     sysConfig['nextvector'] = dbStores['config']['nextvector']
+    #yrt
+
+    try:
         sysConfig['version'] = dbStores['config']['version']
     except:
         dbStores['config']['version'] = 0.1
         sysConfig['version'] = dbStores['config']['version']
     #yrt
 
+    #sysConfig['cfgstorage'] = dbStores['config']
     dbStores['config'].sync()
+
+    trace_log( _logSysLevel, _logInfo, 'Read sysConfig in from dbStore')
 
     return sysConfig
 #fed
@@ -331,15 +520,15 @@ def ngram_store_add(dbStores, ngram, srcID):
     if not dbStores['ngram'].has_key(ngram):
         # initialize item if not already in the master dictionary
         dbStores['ngram'][ngram] = {srcID:1}
-        trace_log( _logSysLevel, _logInfo, ['Creating dbStores[ngram][ngram]:', srcID, ngram, dbStores['ngram'][ngram]])
+        trace_log( _logSysLevel, _logTrace, dbStores['ngram'][ngram], context='Created ngram: ' + ngram)
     elif srcID in dbStores['ngram'][ngram]:
         # Count finds of ngram in srcID
         dbStores['ngram'][ngram][srcID] += 1
-        trace_log( _logSysLevel, _logInfo, ['Changing dbStores[ngram][ngram]:', srcID, ngram, dbStores['ngram'][ngram]])
+        trace_log( _logSysLevel, _logTrace, dbStores['ngram'][ngram], context='Increased (' + ngram + '): ' + srcID)
     else:
         #file isn't recorded as a viable match, then add to list
         dbStores['ngram'][ngram][srcID] = 1
-        trace_log( _logSysLevel, _logInfo, ['Adding dbStores[ngram][ngram]:', srcID, ngram, dbStores['ngram'][ngram]])
+        trace_log( _logSysLevel, _logTrace, dbStores['ngram'][ngram], context='Added (' + ngram + '): ' + srcID)
     #fi
     return
 #fed
@@ -354,35 +543,26 @@ def src_ngram_add(dbStores, ngram, lineID, srcID):
         # Add ngram's existence into Meta Storage
         if dbStores['docmeta'][srcID]['ngrams'] == []:
             dbStores['docmeta'][srcID]['ngrams'] = [ngram]
-            trace_log( _logSysLevel, _logInfo, ['Creating dbStores[docmeta][srcID][ngrams]:', srcID, ngram, dbStores['docmeta'][srcID]['ngrams'][-10:]])
+            trace_log( _logSysLevel, _logTrace, dbStores['docmeta'][srcID]['ngrams'][-10:], context='DocMeta Created (' + srcID + '):')
         elif ngram not in dbStores['docmeta'][srcID]['ngrams']:
             dbStores['docmeta'][srcID]['ngrams'].append(ngram)
-            trace_log( _logSysLevel, _logInfo, ['Adding dbStores[docmeta][srcID][ngrams]:', srcID, ngram, dbStores['docmeta'][srcID]['ngrams'][-10:]])
+            trace_log( _logSysLevel, _logTrace, dbStores['docmeta'][srcID]['ngrams'][-10:], context='DocMeta Added (' + srcID + '):')
         #fi
     #fi
 
     # Add/initialize ngram and line(s) info Source Statistics
     if not dbStores['docstat'].has_key(srcID):
         dbStores['docstat'][srcID] = { ngram :[lineID] }
-        trace_log( _logSysLevel, _logInfo, ['Creating dbStores[docstat][srcID][ngram]:', srcID, ngram, dbStores['docstat'][srcID][ngram][-10:]])
+        trace_log( _logSysLevel, _logInfo, dbStores['docstat'][srcID][ngram][-10:], context='DocStat Created ' + srcID + ' with ngram ' + ngram)
     elif ngram not in dbStores['docstat'][srcID]:
         # if ngram hasn't been initialized
         dbStores['docstat'][srcID][ngram] = [lineID]
-        trace_log( _logSysLevel, _logInfo, ['Creating dbStores[docstat][srcID][ngram]:', srcID, ngram, dbStores['docstat'][srcID][ngram][-10:]])
+        trace_log( _logSysLevel, _logInfo, dbStores['docstat'][srcID][ngram][-10:], context='DocStat Created ' + srcID + ' / ' + ngram)
     elif lineID not in dbStores['docstat'][srcID][ngram]:
         # if line isn't recorded as a viable match, then add to list
         dbStores['docstat'][srcID][ngram].append(lineID)
-        trace_log( _logSysLevel, _logInfo, ['Adding dbStores[docstat][srcID][ngram]:', srcID, ngram, dbStores['docstat'][srcID][ngram][-10:]])
+        trace_log( _logSysLevel, _logInfo, dbStores['docstat'][srcID][ngram][-10:], context='DocStat Added to (' + srcID + '): ' + ngram)
     #fi
-    return
-#fed
-
-# Close/Cleanup datastores
-def close_datastores(dbStores):
-    for fileHandle in dbStores.keys():
-        dbStores[fileHandle].sync()
-        dbStores[fileHandle].close()
-    #rof
     return
 #fed
 
@@ -426,23 +606,28 @@ def index_file_txt(dbStores, sysConfig, fileList, srcCat, srcSubCat):
 
     # for each file, get a UID and parse
     for fileName in fileList:
-        # Build a individual File Breakdown dictionary
-        srcID = uuid_source(dbStores, sysConfig, '' + srcCat + ':' + srcSubCat + ':' + fileName + '')
-        init_source(dbStores, srcID, fileName, srcCat, srcSubCat)
+        trace_log( _logSysLevel, _logTrace, {'Filename':fileName, 'SrcCat':srcCat, 'SrcSubCat': srcSubCat}, context='Examining')
 
-        trace_log( _logSysLevel, _logTrace, ['SrcID, Filename, SrcCat, SrcSubCat:', srcID, fileName, srcCat, srcSubCat])
+        # Build a individual File Breakdown ngrams
+        srcID = uuid_source(dbStores, sysConfig, srcCat + ':' + srcSubCat + ':' + fileName)
+        init_source(dbStores, srcID, fileName, srcCat, srcSubCat)
 
         if not dbStores['docmeta'][srcID]['indexed']:
             lineID = 0
             with open( fileName, mode = 'rU' ) as currFile:
-                trace_log( _logSysLevel, _logTrace, ['LineID, fileName:', lineID, normalise_text(fileName)])
-                src_line_ngram_storage(dbStores, srcID, lineID, ngramAnalyzer(normalise_text(fileName)))
+                normalisedText = normalise_text(fileName)
+                if not normalisedText in [None, '', ' ']:
+                    trace_log( _logSysLevel, _logInfo, {'SrcID':srcID, 'Filename':filename, 'SrcCat':srcCat, 'SrcSubCat': srcSubCat, 'LineID': lineID, 'NormalisedText':normalisedText}, context='Initializing')
+                    dict_parse_words(dbStores, sysConfig, normalisedText.split())
+                    src_line_ngram_storage(dbStores, srcID, lineID, ngramAnalyzer(normalisedText))
+                #fi
 
                 # for each line get a UID and parse line
                 for lineID, line in enumerate(currFile, 1):
                     normalisedText = normalise_text(line)
                     if not normalisedText in [None, '', ' ']:
-                        trace_log( _logSysLevel, _logTrace, ['LineID, normalisedText:', lineID, normalisedText])
+                        trace_log( _logSysLevel, _logTrace, {'SrcID':srcID, 'Filename':filename, 'SrcCat':srcCat, 'SrcSubCat': srcSubCat, 'LineID': lineID, 'NormalisedText':normalisedText}, context='Processing')
+                        dict_parse_words(dbStores, sysConfig, normalisedText.split())
                         src_line_ngram_storage(dbStores, srcID, lineID, ngramAnalyzer(normalisedText))
                     #fi
                 #rof
@@ -451,6 +636,7 @@ def index_file_txt(dbStores, sysConfig, fileList, srcCat, srcSubCat):
             dbStores['ngram'].sync()
             dbStores['docmeta'].sync()
             dbStores['docstat'].sync()
+            trace_log( _logSysLevel, _logInfo, {'SrcID':srcID, 'Filename':filename, 'SrcCat':srcCat, 'SrcSubCat': srcSubCat, 'Lines': lineID}, context='Finished')
         #fi
     #rof
 #def
