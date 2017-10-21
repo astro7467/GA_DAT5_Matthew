@@ -204,12 +204,11 @@ def w2v_generate_batch(vectorList, dataIndex, batchSize, numSkips, skipWindow):
 # Take a file and produces a temporary normalised file
 def normalise_file(dbStores, sysConfig, fileName, tempDir):
     tempFile = "data/textstore.dat"
-    #tempFile = os.path.join(tempDir, os.path.basename(fileName))
+    tempFile = os.path.join(tempDir, os.path.basename(fileName))
 
     trace_log( _logSysLevel, _logTrace, {'tempDir':tempDir, 'tempFile':tempFile, 'Filename':fileName}, context='Normalised File Start')
 
-    writeFile = open(tempFile, 'a+t')
-    #writeFile = open(tempFile, 'w+t')
+    writeFile = open(tempFile, 'w+t')
     try:
         normalisedText = normalise_text(fileName)
         if not normalisedText in [None, '', ' ']:
@@ -236,16 +235,17 @@ def normalise_file(dbStores, sysConfig, fileName, tempDir):
 
 # Count occurances of words & Convert (normalised) file from words to list of vectors
 def vector_word_count_file(dbStores, sysConfig, normFile):
-    wordCount = list()
-    vectorList = list()
-    counter = collections.Counter()
 
     trace_log( _logSysLevel, _logInfo, {'Filename':normFile}, context='Starting WordCount & Vectorize List...')
 
     with open( normFile, mode = 'rU' ) as readFile:
+        wordCount = list()
+        vectorList = list()
+        counter = collections.Counter()
+
         # read each line, count each word & append to vector list as vectors
         for line in readFile:
-            counter.update(line)
+            counter.update(line.split())
             for word in line.split():
                 try:
                     vectorList.append(dbStores['dict'][word])
@@ -258,7 +258,8 @@ def vector_word_count_file(dbStores, sysConfig, normFile):
         #rof
     #htiw
 
-    wordCount.extend(counter)
+    #wordCount.extend(counter)
+    wordCount.extend(map(list, counter.items()))
 
     trace_log( _logSysLevel, _logTrace, wordCount[:50], context='Producted wordCount')
     trace_log( _logSysLevel, _logTrace, vectorList[:100], context='Producted vectorList')
@@ -287,7 +288,7 @@ def vector_file(dbStores, sysConfig, fileList, srcCat, srcSubCat):
         if not dbStores['docmeta'][srcID]['word2vec']:
             normFile = normalise_file(dbStores, sysConfig, fileName, tempDir)
             wordCount, vectorList = vector_word_count_file(dbStores, sysConfig, normFile)
-            tf_word2vec(dbStores, sysConfig, wordCount, vectorList)
+            #tf_word2vec(dbStores, sysConfig, wordCount, vectorList)
             #dbStores['docmeta'][srcID]['word2vec'] = True
             trace_log( _logSysLevel, _logInfo, {'SrcID':srcID, 'Filename':fileName, 'Normalised Filename':normFile}, context='Vector File Finished')
         #fi
