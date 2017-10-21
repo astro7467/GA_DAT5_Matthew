@@ -191,7 +191,7 @@ def w2v_files():
     #rof
     swi.trace_log( _logSysLevel, _logInfo, 'Found '+str(len(fileList))+' '+srcCat+' of '+srcSubCat+' to scan')
     swi.trace_log( _logSysLevel, _logTrace, fileList[-10:], context='Last 10 Files to scan')
-    swi.vector_file(dbStores, sysConfig, fileList)
+    swi.vector_file(dbStores, sysConfig, fileList, srcCat, srcSubCat)
 
     # Index *.CSV files
     srcCat = 'FILE'
@@ -205,7 +205,7 @@ def w2v_files():
     #rof
     swi.trace_log( _logSysLevel, _logInfo, 'Found '+str(len(fileList))+' '+srcCat+' of '+srcSubCat+' to scan')
     swi.trace_log( _logSysLevel, _logTrace, fileList[-10:], context='Last 10 Files to scan')
-    swi.vector_file(dbStores, sysConfig, fileList)
+    swi.vector_file(dbStores, sysConfig, fileList, srcCat, srcSubCat)
 
     swi.close_datastores(dbStores)
     return

@@ -11925,7 +11925,7 @@ a.anchor-link {
 <ul>
 <li><p>Rank Sources using Ngram based scoring (width of 3)</p>
 </li>
-<li><p>Suppliment Ngram search with Word2Vec Skipgram most likely nearest neighbours based <em>augmentation</em> of search term</p>
+<li><p>Suppliment Ngram search with Word2Vec Skipgram <strong>Link</strong> most likely nearest neighbours based <em>augmentation</em> of search term</p>
 </li>
 </ul>
 
@@ -11988,6 +11988,7 @@ a.anchor-link {
 2gram = 4 items - `[ consider this, this line, line of, of text ]`
 
 3gram = 3 items - `[ consider this line, this line of, line of text ]`
+
 Total = 12 potential Ngrams to leverage</code></pre>
 
 </div>
@@ -12021,7 +12022,7 @@ Total = 12 potential Ngrams to leverage</code></pre>
 <div class="text_cell_render border-box-sizing rendered_html">
 <p>To counter this, for <em>search phrases</em>, we generate every possible Ngram, to given width, and drop all those never seen before (ie. not in our Ngram Datastore)</p>
 <p>eg: <code>Python Learning Examples SciKit Data Science</code> -&gt;</p>
-<p><code>[ TODO ]</code></p>
+<p><code>[ data, data examples, data examples learning, data examples python, data examples science, data examples scikit, data learning, data learning examples, data learning python, data learning science, data learning scikit, data python, data python examples, data python learning, data python science, data python scikit, data science, data science examples, data science learning, data science python, data science scikit, data scikit, data scikit examples, data scikit learning, data scikit python, data scikit science, examples, examples data, examples data learning, examples data python, examples data science, examples data scikit, examples learning, examples learning data, examples learning python, examples learning science, examples learning scikit, examples python, examples python data, examples python learning, examples python science, examples python scikit, examples science, examples science data, examples science learning, examples science python, examples science scikit, examples scikit, examples scikit data, examples scikit learning, examples scikit python, examples scikit science, learning, learning data, learning data examples, learning data python, learning data science, learning data scikit, learning examples, learning examples data, learning examples python, learning examples science, learning examples scikit, learning python, learning python data, learning python examples, learning python science, learning python scikit, learning science, learning science data, learning science examples, learning science python, learning science scikit, learning scikit, learning scikit data, learning scikit examples, learning scikit python, learning scikit science, python, python data, python data examples, python data learning, python data science, python data scikit, python examples, python examples data, python examples learning, python examples science, python examples scikit, python learning, python learning data, python learning examples, python learning science, python learning scikit, python science, python science data, python science examples, python science learning, python science scikit, python scikit, python scikit data, python scikit examples, python scikit learning, python scikit science, science, science data, science data examples, science data learning, science data python, science data scikit, science examples, science examples data, science examples learning, science examples python, science examples scikit, science learning, science learning data, science learning examples, science learning python, science learning scikit, science python, science python data, science python examples, science python learning, science python scikit, science scikit, science scikit data, science scikit examples, science scikit learning, science scikit python, scikit, scikit data, scikit data examples, scikit data learning, scikit data python, scikit data science, scikit examples, scikit examples data, scikit examples learning, scikit examples python, scikit examples science, scikit learning, scikit learning data, scikit learning examples, scikit learning python, scikit learning science, scikit python, scikit python data, scikit python examples, scikit python learning, scikit python science, scikit science, scikit science data, scikit science examples, scikit science learning, scikit science python ]</code></p>
 
 </div>
 </div>
@@ -12282,7 +12283,7 @@ norm_text = re.sub(r'^\d+$|^\d+\W+|\W+\d+\W+|\W+\d+$', r' ', norm_text)</code></
 <ul>
 <li>When URLs or other sources are linked, extend indexing</li>
 <li><em>BackRub</em><ul>
-<li>Original Google Algorith<ul>
+<li>Original Google Algorithm <strong>Link</strong><ul>
 <li>More references/link = higher score</li>
 <li>Higher Score of Link Source = Higher Score for Target</li>
 </ul>

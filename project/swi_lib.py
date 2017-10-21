@@ -219,8 +219,8 @@ def w2v_generate_batch(vectorList, dataIndex, batchSize, numSkips, skipWindow):
 #def
 
 # Take a file and produces a temporary normalised file
-def normalise_file(dbStores, sysConfg, fileName, tempDir):
-    tempFile = os.path.join(tempDir, fileName)
+def normalise_file(dbStores, sysConfig, fileName, tempDir):
+    tempFile = os.path.join(tempDir, os.path.basename(fileName))
 
     trace_log( _logSysLevel, _logTrace, {'tempDir':tempDir, 'tempFile':tempFile, 'Filename':fileName}, context='Normalised File Start')
 
@@ -250,7 +250,7 @@ def normalise_file(dbStores, sysConfg, fileName, tempDir):
 #fed
 
 # Count occurances of words & Convert (normalised) file from words to list of vectors
-def vector_word_count_file(dbStores, sysConfg, normFile):
+def vector_word_count_file(dbStores, sysConfig, normFile):
     wordCount = list()
     vectorList = list()
     counter = collections.Counter()
@@ -284,7 +284,7 @@ def vector_word_count_file(dbStores, sysConfg, normFile):
 
 # Takes a given document, and returns a list with the document vectorized,
 # and counts for each word
-def vector_file(dbStores, sysConfg, fileList):
+def vector_file(dbStores, sysConfig, fileList, srcCat, srcSubCat):
     tempDir = tempfile.mkdtemp()
 
     for fileName in fileList:
@@ -296,11 +296,12 @@ def vector_file(dbStores, sysConfg, fileList):
 
         if not dbStores['docmeta'][srcID].has_key('word2vec'):
             dbStores['docmeta'][srcID]['word2vec'] = False
+            dbStores['docmeta'].sync()
         #fi
 
         if not dbStores['docmeta'][srcID]['word2vec']:
-            normFile = normalise_file(dbStores, sysConfg, fileName, tempDir)
-            wordCount, vectorList = vector_word_count_file(dbStores, sysConfg, normFile)
+            normFile = normalise_file(dbStores, sysConfig, fileName, tempDir)
+            wordCount, vectorList = vector_word_count_file(dbStores, sysConfig, normFile)
             #tf_word2vec(dbStores, sysConfig, wordCount, vectorList)
             #dbStores['docmeta'][srcID]['word2vec'] = True
             trace_log( _logSysLevel, _logInfo, {'SrcID':srcID, 'Filename':fileName, 'Normalised Filename':normFile}, context='Vector File Finished')
@@ -615,35 +616,35 @@ def normalise_text(text):
 
 ### Open Datastores and return handles
 # TODO: Serperate W/R opens from RO opens
-def open_datastores():
+def open_datastores(setWriteback=True):
 
     dbStores = dict()
 
     trace_log( _logSysLevel, _logInfo, 'Started Opening dbStores...')
 
     # Config Datastore
-    dbStores['config'] = shelve.open('data/config', writeback=True)
+    dbStores['config'] = shelve.open('data/config', writeback=setWriteback)
 
     # Dictionary to Vectore Datastore
-    dbStores['dict'] = shelve.open('data/dictionary', writeback=True)
+    dbStores['dict'] = shelve.open('data/dictionary', writeback=setWriteback)
 
     # Document Meta Data Datastore
-    dbStores['docmeta'] = shelve.open('data/docmeta', writeback=True)
+    dbStores['docmeta'] = shelve.open('data/docmeta', writeback=setWriteback)
 
     # Document Stats (file ngrams) Datastore
-    dbStores['docstat'] = shelve.open('data/docstat', writeback=True)
+    dbStores['docstat'] = shelve.open('data/docstat', writeback=setWriteback)
 
     # Ngram Datastore (Core index)
-    dbStores['ngram'] = shelve.open('data/ngram', writeback=True)
+    dbStores['ngram'] = shelve.open('data/ngram', writeback=setWriteback)
 
     #file Type/Path to UUID Datastore
-    dbStores['sources'] = shelve.open('data/sources', writeback=True)
+    dbStores['sources'] = shelve.open('data/sources', writeback=setWriteback)
 
     # (Original) Vector to Dictionary Datastore
-    # dbStores['vectdict'] = shelve.open('data/vectdict', writeback=True)
+    # dbStores['vectdict'] = shelve.open('data/vectdict', writeback=setWriteback)
 
     # Vector to Dictionary Datastore
-    dbStores['vectors'] = shelve.open('data/vectors', writeback=True)
+    dbStores['vectors'] = shelve.open('data/vectors', writeback=setWriteback)
 
     # As shelves mandates str for keys, we create a dict inside with int keys for vectors
     # open()/close()/sync() need to occur against 'vectors' not ['vectors]['vectors']
