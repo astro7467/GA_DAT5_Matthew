@@ -163,7 +163,7 @@ def search(searchText):
     print 'topSrcMatches:'
     for index in range(0, len(topSrcMatches)):
         srcID = topSrcMatches[index]
-        print str(index+1).rjust(4), ':', dbStores['docmeta'][srcID]['cat'], dbStores['docmeta'][srcID]['subcat'], str(srcID), str(topSrcInfo[srcID]['score']).ljust(16), str(topSrcInfo[srcID]['ngrams']).rjust(4), dbStores['docmeta'][srcID]['path']
+        print str(index+1).rjust(4), ':', dbStores['docmeta'][srcID]['cat'], dbStores['docmeta'][srcID]['subcat'], str(srcID), str(topSrcInfo[srcID]['score']).ljust(18), str(topSrcInfo[srcID]['ngrams']).rjust(4), dbStores['docmeta'][srcID]['path']
     #rof
 
     swi.trace_log( _logSysLevel, _logStatus, sorted(ngramList), context='ngrams used')

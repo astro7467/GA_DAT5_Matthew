@@ -76,15 +76,8 @@ def tf_word2vec(dbStores, sysConfig, wordCount, vectorList):
     validExamples = np.random.choice(validWindow, validSize, replace=False)
 
 
-    #graph = tf.Graph()
-    #with graph.as_default():
-    with tf.Session(graph=tf.Graph()) as session:
-
-        try:
-            tf.saved_model.loader.load(session, [tag_constants.TRAINING], './data/tfSavedModelBuilder')
-        except:
-            print 'No Model to load'
-        #yrt
+    graph = tf.Graph()
+    with graph.as_default():
 
         # Input data.
         trainInputs = tf.placeholder(tf.int32, shape=[batchSize])
@@ -93,7 +86,7 @@ def tf_word2vec(dbStores, sysConfig, wordCount, vectorList):
 
         # Ops and variables pinned to the GPU
         # change to CPU if not on tensorflow-gpu with CDDN & CUDA support
-        with tf.device('/gpu:0'):
+        with tf.device('/cpu:0'):
             # Look up embeddings for inputs.
             embeddings = tf.Variable(tf.random_uniform([vocabularySize, embeddingSize], -1.0, 1.0))
             embed = tf.nn.embedding_lookup(embeddings, trainInputs)
@@ -123,25 +116,19 @@ def tf_word2vec(dbStores, sysConfig, wordCount, vectorList):
         #htiw
     #htiw
 
-    builder = tf.saved_model.builder.SavedModelBuilder('./data/tfSavedModelBuilder')
-    with tf.Session(graph=tf.Graph()) as session:
-        builder.add_meta_graph_and_variables(session, [tf.saved_model.tag_constants.TRAINING] )
-    builder.save()
+    # builder = tf.saved_model.builder.SavedModelBuilder('./data/tfSavedModelBuilder')
+    # with tf.Session(graph=tf.Graph()) as session:
+    #     builder.add_meta_graph_and_variables(session, [tf.saved_model.tag_constants.TRAINING] )
+    # builder.save()
 
     # Begin training.
-    num_steps = 100001
+    numSteps = 100001
 
-    #with tf.Session(graph=graph) as session:
-    with tf.Session(graph=tf.Graph()) as session:
+    with tf.Session(graph=graph) as session:
+    #with tf.Session(graph=tf.Graph()) as session:
         # We must initialize all variables before we use them.
         init.run()
         print('Initialized')
-
-        try:
-            tf.saved_model.loader.load(session, [tag_constants.TRAINING], './data/tfSavedModelBuilder')
-        except:
-            print 'No Model to load'
-        #yrt
 
         averageLoss = 0
         for step in xrange(numSteps):
@@ -180,10 +167,6 @@ def tf_word2vec(dbStores, sysConfig, wordCount, vectorList):
         finalEmbeddings = normalizedEmbeddings.eval()
     #htiw
 
-    builder = tf.saved_model.builder.SavedModelBuilder('./data/tfSavedModelBuilder')
-    with tf.Session(graph=tf.Graph()) as session:
-        builder.add_meta_graph_and_variables(session, [tf.saved_model.tag_constants.TRAINING] )
-    builder.save()
     return
 #def
 
@@ -195,7 +178,7 @@ def w2v_generate_batch(vectorList, dataIndex, batchSize, numSkips, skipWindow):
     labels = np.ndarray(shape=(batchSize, 1), dtype=np.int32)
     span = 2 * skipWindow + 1  # [ skipWindow target skipWindow ]
     buffer = collections.deque(maxlen=span)
-    if dataIndex + span > len(data):
+    if dataIndex + span > len(vectorList):
         dataIndex = 0
     buffer.extend(vectorList[dataIndex:dataIndex + span])
     dataIndex += span
@@ -220,11 +203,13 @@ def w2v_generate_batch(vectorList, dataIndex, batchSize, numSkips, skipWindow):
 
 # Take a file and produces a temporary normalised file
 def normalise_file(dbStores, sysConfig, fileName, tempDir):
-    tempFile = os.path.join(tempDir, os.path.basename(fileName))
+    tempFile = "data/textstore.dat"
+    #tempFile = os.path.join(tempDir, os.path.basename(fileName))
 
     trace_log( _logSysLevel, _logTrace, {'tempDir':tempDir, 'tempFile':tempFile, 'Filename':fileName}, context='Normalised File Start')
 
-    writeFile = open(tempFile, 'w+t')
+    writeFile = open(tempFile, 'a+t')
+    #writeFile = open(tempFile, 'w+t')
     try:
         normalisedText = normalise_text(fileName)
         if not normalisedText in [None, '', ' ']:
@@ -302,7 +287,7 @@ def vector_file(dbStores, sysConfig, fileList, srcCat, srcSubCat):
         if not dbStores['docmeta'][srcID]['word2vec']:
             normFile = normalise_file(dbStores, sysConfig, fileName, tempDir)
             wordCount, vectorList = vector_word_count_file(dbStores, sysConfig, normFile)
-            #tf_word2vec(dbStores, sysConfig, wordCount, vectorList)
+            tf_word2vec(dbStores, sysConfig, wordCount, vectorList)
             #dbStores['docmeta'][srcID]['word2vec'] = True
             trace_log( _logSysLevel, _logInfo, {'SrcID':srcID, 'Filename':fileName, 'Normalised Filename':normFile}, context='Vector File Finished')
         #fi
