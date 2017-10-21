@@ -11914,14 +11914,7 @@ a.anchor-link {
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<h1 id="Objective">Objective<a class="anchor-link" href="#Objective">&#182;</a></h1>
-</div>
-</div>
-</div></section></section><section><section>
-<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
-</div>
-<div class="inner_cell">
-<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Objective">Objective<a class="anchor-link" href="#Objective">&#182;</a></h1><hr>
 <p>Leverage Ngrams plus TensorFlow (Word2Vec) to rank a body of <em>sources</em> against a provided search <em>phrase</em></p>
 <ul>
 <li><p>Rank Sources using Ngram based scoring (width of 3)</p>
@@ -11937,7 +11930,7 @@ a.anchor-link {
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<h1 id="Long-Term-Objective">Long-Term Objective<a class="anchor-link" href="#Long-Term-Objective">&#182;</a></h1>
+<h1 id="Long-Term-Objective">Long-Term Objective<a class="anchor-link" href="#Long-Term-Objective">&#182;</a></h1><h2 id="Build-a-Personal-(Self-Hosted)-Search-Engine">Build a Personal (Self-Hosted) Search Engine<a class="anchor-link" href="#Build-a-Personal-(Self-Hosted)-Search-Engine">&#182;</a></h2><h3 id="Indexes-and-searches-preferred-and-personal-data-sources">Indexes and searches preferred and personal data sources<a class="anchor-link" href="#Indexes-and-searches-preferred-and-personal-data-sources">&#182;</a></h3>
 </div>
 </div>
 </div></section></section><section><section>
@@ -11945,7 +11938,7 @@ a.anchor-link {
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<h2 id="Build-a-Personal-(Self-Hosted)-Search-Engine">Build a Personal (Self-Hosted) Search Engine<a class="anchor-link" href="#Build-a-Personal-(Self-Hosted)-Search-Engine">&#182;</a></h2><h3 id="Indexes-and-searches-preferred-and-personal-data-sources">Indexes and searches preferred and personal data sources<a class="anchor-link" href="#Indexes-and-searches-preferred-and-personal-data-sources">&#182;</a></h3><h4 id="Data-Sources-Can-Include-(Directly-or-via-Plugins)">Data Sources Can Include (Directly or via Plugins)<a class="anchor-link" href="#Data-Sources-Can-Include-(Directly-or-via-Plugins)">&#182;</a></h4><ul>
+<h4 id="Data-Sources-Can-Include-(Directly-or-via-Plugins)">Data Sources Can Include (Directly or via Plugins)<a class="anchor-link" href="#Data-Sources-Can-Include-(Directly-or-via-Plugins)">&#182;</a></h4><ul>
 <li>AV Metadata</li>
 <li>Personal Files/Directories<ul>
 <li>eg. DOC, ODF, PDF, TXT, CSV, MOBI, EPUB, code</li>
@@ -11965,6 +11958,9 @@ a.anchor-link {
 </li>
 <li>Any Data Store with a defined API, authentication (eg OAUTH) and/or open (or documented) standards</li>
 </ul>
+<h4 id="Functionality-Extendable-via-Plugins">Functionality Extendable via Plugins<a class="anchor-link" href="#Functionality-Extendable-via-Plugins">&#182;</a></h4><ul>
+<li>P2P, Prediction and related sources etc</li>
+</ul>
 
 </div>
 </div>
@@ -11973,14 +11969,7 @@ a.anchor-link {
 </div>
 <div class="inner_cell">
 <div class="text_cell_render border-box-sizing rendered_html">
-<h1 id="Lessons-Learnt-...-So-Far-...">Lessons Learnt ... <em>So Far</em> ...<a class="anchor-link" href="#Lessons-Learnt-...-So-Far-...">&#182;</a></h1>
-</div>
-</div>
-</div></section></section><section><section>
-<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
-</div>
-<div class="inner_cell">
-<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Lessons-Learnt-...-So-Far-...">Lessons Learnt ... <em>So Far</em> ...<a class="anchor-link" href="#Lessons-Learnt-...-So-Far-...">&#182;</a></h1><hr>
 <ul>
 <li><p>Who needs classes? It's just a proof of concept</p>
 <p><strong>Wrong</strong> - Code Complexity</p>
@@ -11995,10 +11984,26 @@ a.anchor-link {
 <p><strong>Nested Dictionaries are (code) Messy</strong>:</p>
 <p><code>dict = { k1: { k2: { k3: v }}}</code> -&gt; <code>dict[k1][k2][k3]</code></p>
 </li>
+</ul>
+
+</div>
+</div>
+</div></section></section><section><section>
+<div class="cell border-box-sizing text_cell rendered"><div class="prompt input_prompt">
+</div>
+<div class="inner_cell">
+<div class="text_cell_render border-box-sizing rendered_html">
+<h1 id="Lessons-Learnt-...-So-Far-...-(cont..)">Lessons Learnt ... <em>So Far</em> ... (cont..)<a class="anchor-link" href="#Lessons-Learnt-...-So-Far-...-(cont..)">&#182;</a></h1><hr>
+<ul>
 <li><p>I'll build a non/semi-Data Science model 1st for comparision</p>
 <p><strong>Time Consuming</strong> - More about Python than Data Science</p>
 </li>
 <li><p>RegEx - Need I say more...</p>
+</li>
+<li><p>I don't know how to describe Data Science...</p>
+<ul>
+<li>But I know what it is when I see it...</li>
+</ul>
 </li>
 </ul>
 
@@ -12045,9 +12050,9 @@ a.anchor-link {
 <div class="text_cell_render border-box-sizing rendered_html">
 <p>How a search phrase is sequenced or weighted by a user can be very different compared to how the terms are used.</p>
 <p>Consider:</p>
-<p>Search Phrase: <code>Python Learning Examples SciKit Data Science</code></p>
+<p><strong>Search Phrase:</strong> <code>Python Learning Examples SciKit Data Science</code></p>
 <p>vs</p>
-<p>Book Title: <code>Data Science and SciKit: Learning through Python with Examples</code></p>
+<p><strong>Book Title:</strong> <code>Data Science and SciKit: Learning through Python with Examples</code></p>
 <p>Using Ngrams, the best hit we get beyond 1gram (low scoring), is the 2gram <code>Data Science</code> - in a sea of documents, this will not rank high - unless a word is rare eg <code>scikit</code></p>
 
 </div>
