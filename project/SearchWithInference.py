@@ -21,7 +21,7 @@
 """
 
 """
-This system only has is a simple minimum DB design
+    This system only has a simple minimum DB design
     *** will not scale - proof of concept only ***
     for full multi doc indexing, would need to breakdown datastores
     to faciliate concurrency, and different document types and meta data needs.
@@ -38,11 +38,12 @@ TODOS / Full Product Considerations:
 - line/cell/tag/paragraph weights or tags eg. <h1> > <h2>, 'word': 'definition' weighsysConfig['vrate D']B backend from code (i.e. shelve/cpickle vs sqlite/mySQL/Marina/PostgresSQL)
 """
 
-import swi_lib as swi
 import getopt
 import random
 import os
 import sys
+
+import swi_lib as swi
 
 _logError = 0
 _logStatus = 1
@@ -53,10 +54,39 @@ _logSysLevel = _logTrace
 
 dataSpecVer = 0.1 # Min data spec version expected & used
 
+# Run Word2Vec on existing data (Vectorized)
+# Extract Data for inference searching
+def word2vec():
+    dbStores = swi.open_datastores()
+    sysConfig = swi.sys_config(dbStores)
+    swi.chk_coredb_keys(dbStores, sysConfig)
+
+
+    w2vCounts = shelve.open('./data/w2vcounts', flag='c', protocol=4, writeback=setWriteback)
+    w2vVector = shelve.open('./data/w2vvectors',  flag='c', protocol=4, writeback=setWriteback)
+
+    w2vCounts['data'] = list()
+    w2vVector['data'] = list()
+
+    w2vVector.sync()
+    w2vCounts.sync()
+
+    for srcID in dbStores['docmeta']:
+        if dbStores['docmeta'][srcID]['vector'] and srcID in dbStores['vectorized']:
+            w2vVector['data'].append(dbStores['vectorized'].srcID)
+
+
+
+
+    return
+#fed
+
+
 # Provide some insight to the datastores
 def system_analyse():
     dbStores = swi.open_datastores()
     sysConfig = swi.sys_config(dbStores)
+    swi.chk_coredb_keys(dbStores, sysConfig)
 
     line = '-' * 80
 
@@ -65,8 +95,6 @@ def system_analyse():
     print(line)
     print('Config Record Count:', len(dbStores['config'].keys()))
     swi.trace_log(_logConfig, _logStatus, sysConfig, 'Config Key & Value Pairs')
-
-    swi.chk_coredb_keys(dbStores, sysConfig)
 
     dictVector = max(dbStores['dict'].values())
     vecVector = max(dbStores['vectors']['vectors'].keys())
@@ -142,6 +170,7 @@ def system_analyse():
     print(line)
 
     swi.close_datastores(dbStores)
+    return
 #fed
 
 # Search for string in index
@@ -176,49 +205,12 @@ def search(searchText):
     return
 #fed
 
-def w2v_files():
-    dbStores = swi.open_datastores()
-    sysConfig = swi.sys_config(dbStores)
-
-    swi.trace_log( _logSysLevel, _logConfig, sysConfig, context='sysConfig')
-
-    # Index *.TXT files
-    srcCat = 'FILE'
-    srcSubCat = 'TXT'
-    fileList = []
-
-    for root, dirs, files in os.walk(sysConfig['corpus']):
-        for file in files:
-            if file.endswith((".txt",".TXT",".Txt")): fileList.append(os.path.join(root, file))
-        #rof
-    #rof
-    swi.trace_log( _logSysLevel, _logInfo, 'Found '+str(len(fileList))+' '+srcCat+' of '+srcSubCat+' to scan')
-    swi.trace_log( _logSysLevel, _logTrace, fileList[-10:], context='Last 10 Files to scan')
-    swi.vector_file(dbStores, sysConfig, fileList, srcCat, srcSubCat)
-
-    # Index *.CSV files
-    srcCat = 'FILE'
-    srcSubCat = 'CSV'
-
-    for root, dirs, files in os.walk(sysConfig['corpus']):
-        for file in files:
-            if file.endswith((".csv",".CSV")): fileList.append(os.path.join(root, fileName))
-        #rof
-    #rof
-    swi.trace_log( _logSysLevel, _logInfo, 'Found '+str(len(fileList))+' '+srcCat+' of '+srcSubCat+' to scan')
-    swi.trace_log( _logSysLevel, _logTrace, fileList[-10:], context='Last 10 Files to scan')
-    swi.vector_file(dbStores, sysConfig, fileList, srcCat, srcSubCat)
-
-    swi.close_datastores(dbStores)
-    return
-#fed
-
 def index_files():
     dbStores = swi.open_datastores()
     sysConfig = swi.sys_config(dbStores)
 
     swi.trace_log( _logSysLevel, _logConfig, sysConfig, context='sysConfig')
-    swi.chk_docmeta_keys(dbStores, sysConfig)
+    swi.chk_coredb_keys( dbStores, sysConfig )
 
     # Index *.TXT files
     srcCat = 'FILE'
@@ -250,6 +242,7 @@ def index_files():
     swi.parse_file_txt(dbStores, sysConfig, fileList, srcCat, srcSubCat)
 
     swi.ngram_srcdoc(dbStores, sysConfig)
+    swi.vectorize_src(dbStores, sysConfig)
 
     swi.close_datastores(dbStores)
     return
@@ -287,7 +280,9 @@ def validate_dict():
     swi.trace_log( _logSysLevel, _logStatus, 'Number of keys Dict: ' + str(len(dbStores['dict'].keys())) )
     swi.trace_log( _logSysLevel, _logStatus, 'Number of keys Vect: ' + str(len(dbStores['vectors']['vectors'].keys())) )
     print(line)
+
     swi.close_datastores(dbStores)
+    return
 #def
 
 # Parse commandline options
@@ -330,7 +325,7 @@ def main(argv):
             sys.exit()
         elif opt in ("-V", "--vector", "--vectorize"):
             swi.trace_log( _logSysLevel, _logInfo, 'Arg - Vectorize')
-            w2v_files()
+            word2vec()
             sys.exit()
         elif opt in ("--import-stopwords"):
             swi.trace_log( _logSysLevel, _logInfo, 'Arg - Import Stopwords')

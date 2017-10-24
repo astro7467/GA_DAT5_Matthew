@@ -30,9 +30,10 @@ celerybeat-schedule
 *~
 
 # project database files
-project/data/*
-project/data/*.bak
-project/data/*.dat
-project/data/*.dir
-project/corpus
+project/data/
+project/corpus/
+
+# Idea/PyCharm
+.idea/
+project/.idea/
 

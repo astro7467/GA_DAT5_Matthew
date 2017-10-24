@@ -633,7 +633,7 @@ def uuid_source(dbStores, sysConfig, srcPath, srcCat, srcSubCat):
     return srcID
 #fed
 
-# Initialize Src Records (i.e. Delete for now)
+# Initialize Src Records
 def init_source(dbStores, srcID, srcPath, srcCat='UNK', srcSubCat='UNK'):
     # Create srcID for new sources Meta Data Record, and set minimum values
     if not srcID in dbStores['docmeta']:
@@ -836,20 +836,21 @@ def parse_file_txt(dbStores, sysConfig, fileList, srcCat, srcSubCat):
 #fed
 
 def import_stopwords():
-    dbStores = open_datastores()
-    sysConfig = sys_config(dbStores)
+    if os.path.isfile("./stopwords-en.txt"):
+        dbStores = open_datastores()
+        sysConfig = sys_config(dbStores)
+        trace_log( _logSysLevel, _logInfo, "./stopwords-en.txt", context='Stopwords Loading')
+        with open("./stopwords-en.txt") as stopFile:
+            dbStores['stopwords']['en'] = stopFile.read().lower().split()
+            trace_log( _logSysLevel, _logInfo, dbStores['stopwords']['en'], context='Stopwords Loaded')
+        #htiw
 
-    trace_log( _logSysLevel, _logInfo, "./stopwords-en.txt", context='Stopwords Loading')
-    with open("./stopwords-en.txt") as stopFile:
-        dbStores['stopwords']['en'] = stopFile.read().lower().split()
-        trace_log( _logSysLevel, _logInfo, dbStores['stopwords']['en'], context='Stopwords Loaded')
-    #htiw
-
-    dbStores['stopwords']['en-norm'] = [normalise_text(word) for word in dbStores['stopwords']['en']]
-    trace_log( _logSysLevel, _logInfo, dbStores['stopwords']['en-norm'], context='Stopwords Normalised')
-    dbStores['stopwords'].sync()
-
-    close_datastores(dbStores)
+        dbStores['stopwords']['en-norm'] = [normalise_text(word) for word in dbStores['stopwords']['en']]
+        trace_log( _logSysLevel, _logInfo, dbStores['stopwords']['en-norm'], context='Stopwords Normalised')
+        dbStores['stopwords'].sync()
+        close_datastores(dbStores)
+    else:
+        trace_log( _logSysLevel, _logError, "./stopwords-en.txt", context='Stopwords File Missing')
 #fed
 
 def chk_coredb_keys(dbStores, sysConfig):
@@ -926,52 +927,56 @@ def ngram_srcdoc(dbStores, sysConfig):
             fileName = os.path.join(sysConfig['srcdata'], srcID, 'normal.dat')
             trace_log( _logSysLevel, _logTrace, {'Filename':fileName}, context='Index Starting')
 
-            # Generate Vectorization of ngrams and strip stop words
-            vectorizer = CountVectorizer(ngram_range=(1, sysConfig['ngram']))
-            ngramAnalyzer = vectorizer.build_analyzer()
+            if os.path.isfile(fileName):
+                # Generate Vectorization of ngrams and strip stop words
+                vectorizer = CountVectorizer(ngram_range=(1, sysConfig['ngram']))
+                ngramAnalyzer = vectorizer.build_analyzer()
 
-            with open( fileName, mode='rU', errors='ignore') as readFile:
-                # read each line, process ngrams & check for vector dictionary
-                lineID = 0
-                for line in readFile:
-                    trace_log( _logSysLevel, _logTrace, {'LineID': lineID, 'Text':line}, context='Index Processing')
-                    src_line_ngram_storage(dbStores, srcID, lineID, ngramAnalyzer(line))
-                    dict_parse_words(dbStores, sysConfig, line.split(), xcheck=True)
-                    lineID += 1
-                #rof
-            #htiw
-            dbStores['docmeta'][srcID]['indexed'] = True
-            dbStores['docmeta'].sync()
-            dbStores['docstat'].sync()
-            dbStores['ngram'].sync()
-            trace_log( _logSysLevel, _logInfo, {'Filename':fileName}, context='Indexing Finished')
+                with open( fileName, mode='rU', errors='ignore') as readFile:
+                    # read each line, process ngrams & check for vector dictionary
+                    lineID = 0
+                    for line in readFile:
+                        trace_log( _logSysLevel, _logTrace, {'LineID': lineID, 'Text':line}, context='Index Processing')
+                        src_line_ngram_storage(dbStores, srcID, lineID, ngramAnalyzer(line))
+                        dict_parse_words(dbStores, sysConfig, line.split(), xcheck=True)
+                        lineID += 1
+                    #rof
+                #htiw
+                dbStores['docmeta'][srcID]['indexed'] = True
+                dbStores['docmeta'].sync()
+                dbStores['docstat'].sync()
+                dbStores['ngram'].sync()
+                trace_log( _logSysLevel, _logInfo, {'Filename':fileName}, context='Indexing Finished')
+            else:
+                trace_log( _logSysLevel, _logError, {'Filename':fileName}, context='Indexing File Missing')
+            #fi
         #fi
     #rof
 #fed
 
-# Scans srcID for missing WordCount and/or Empty Cortorized lists
+# Scans srcID for missing WordCount and/or Empty Vectorized lists
 # Build the data and populates each
-def vector_word_count_file(dbStores, sysConfig):
+def vectorize_src(dbStores, sysConfig):
     trace_log( _logSysLevel, _logInfo, {'Filename':normFile}, context='Starting WordCount & Vectorize List...')
     # for each srcID, if not indexed/parsed - then extract ngrams
     for srcID in dbStores['docmeta']:
         trace_log( _logSysLevel, _logTrace, {'SrcID':srcID}, context='Vectoring')
 
-        # Chech Preconditions to trigger wordcount and vectorization
+        # Check Preconditions to trigger wordcount and vectorization
         if srcID not in dbStores['vectorized']:
             bldVector = True
             dbStores['vectorized'][srcID] = list()
         else:
             bldVector = dbStores['docmeta'][srcID]['normalised'] and dbStores['docmeta'][srcID]['indexed']
-            bldVector = bldVector and not dbStores['docmeta'][srcID]['vector'])
-            bldVector = bldVector and (len(dbStores['vectorized'][srcID]) = 0 or len(dbStores['docmeta'][srcID]['wordcount']) = 0 )
+            bldVector = bldVector and not dbStores['docmeta'][srcID]['vector']
+            bldVector = bldVector and ( len(dbStores['vectorized'][srcID]) == 0 or len(dbStores['docmeta'][srcID]['wordcount']) == 0 )
         #fi
 
-        if bldVector:
-            fileName = os.path.join(sysConfig['srcdata'], srcID, 'normal.dat')
+        fileName = os.path.join(sysConfig['srcdata'], srcID, 'normal.dat')
+        if bldVector and os.path.isfile(fileName):
             trace_log( _logSysLevel, _logTrace, {'Filename':fileName}, context='Vectoring Starting')
 
-            with open( fileName, mode='rU', errors='ignore') as readFile:
+            with open( fileName, mode='rU', errors='ignore' ) as readFile:
                 wordCount = list()
                 vectorList = list()
                 counter = collections.Counter()
@@ -983,27 +988,27 @@ def vector_word_count_file(dbStores, sysConfig):
                         vectorList.append(dbStores['dict'][word])
                     except:
                         trace_log( _logSysLevel, _logInfo, {'Filename':fileName, 'word':word}, context='Building Vector List - Word not in Dictionary')
-                        dict_parse_words(dbStores, sysConfig, line, xcheck=True)
+                        dict_parse_words(dbStores, sysConfig, word, xcheck=True)
                         vectorList.append(dbStores['dict'][word])
                     #yrt
                 #rof
-                # for line in readFile:
-                #     counter.update(line.split())
-                #     for word in line.split():
-                #         try:
-                #             vectorList.append(dbStores['dict'][word])
-                #         except:
-                #             trace_log( _logSysLevel, _logInfo, {'Filename':normFile, 'word':word}, context='Building Vector List - Word not in Dictionary')
-                #             dict_parse_words(dbStores, sysConfig, line, xcheck=True)
-                #             vectorList.append(dbStores['dict'][word])
-                #         #yrt
-                #     #rof
-                # #rof
+                        # for line in readFile:
+                        #     counter.update(line.split())
+                        #     for word in line.split():
+                        #         try:
+                        #             vectorList.append(dbStores['dict'][word])
+                        #         except:
+                        #             trace_log( _logSysLevel, _logInfo, {'Filename':normFile, 'word':word}, context='Building Vector List - Word not in Dictionary')
+                        #             dict_parse_words(dbStores, sysConfig, line, xcheck=True)
+                        #             vectorList.append(dbStores['dict'][word])
+                        #         #yrt
+                        #     #rof
+                        # #rof
             #htiw
 
             dbStores['docmeta'][srcID]['wordcount'] = wordCount.extend(map(list, counter.items()))
             dbStores['vectorized'][srcID] = vectorList
-            #dbStores['docmeta'][srcID]['vector'] = True
+            dbStores['docmeta'][srcID]['vector'] = True
 
             dbStores['docmeta'].sync()
             dbStores['docstat'].sync()
@@ -1012,37 +1017,8 @@ def vector_word_count_file(dbStores, sysConfig):
             trace_log( _logSysLevel, _logTrace, dbStores['docmeta'][srcID]['wordcount'][:50], context='Producted wordCount')
             trace_log( _logSysLevel, _logTrace, dbStores['vectorized'][srcID][:100], context='Producted vectorList')
             trace_log( _logSysLevel, _logInfo, {'Filename':fileName}, context='Finished WordCount & Vectorize Lists')
-        #fi
+            #fi
     #rof
 
     return
 #def
-
-# Takes a given document, and returns a list with the document vectorized,
-# and counts for each word
-def vector_file(dbStores, sysConfig, fileList, srcCat, srcSubCat):
-    tempDir = tempfile.mkdtemp()
-
-    for fileName in fileList:
-        trace_log( _logSysLevel, _logTrace, {'Filename':fileName}, context='Vector File Examining')
-
-        # Build a individual File Breakdown ngrams
-        srcID = uuid_source(dbStores, sysConfig, srcCat + ':' + srcSubCat + ':' + fileName)
-        init_source(dbStores, srcID, fileName, srcCat, srcSubCat)
-
-        if not 'word2vec' in dbStores['docmeta'][srcID]:
-            dbStores['docmeta'][srcID]['word2vec'] = False
-            dbStores['docmeta'].sync()
-        #fi
-
-        if not dbStores['docmeta'][srcID]['word2vec']:
-            normFile = normalise_file(dbStores, sysConfig, fileName, tempDir)
-            wordCount, vectorList = vector_word_count_file(dbStores, sysConfig, normFile)
-            #tf_word2vec(dbStores, sysConfig, wordCount, vectorList)
-            #dbStores['docmeta'][srcID]['word2vec'] = True
-            trace_log( _logSysLevel, _logInfo, {'SrcID':srcID, 'Filename':fileName, 'Normalised Filename':normFile}, context='Vector File Finished')
-        #fi
-    #rof
-    #os.removedirs(tempDir)
-    return
-#fed
