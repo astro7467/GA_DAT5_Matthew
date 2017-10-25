@@ -629,12 +629,12 @@ def uuid_source(dbStores, sysConfig, srcPath, srcCat, srcSubCat):
         dbStores['sources'].sync()
         srcID = dbStores['sources'][fullSrcPath]
     #fi
-    init_source(dbStores, srcID, srcPath, srcCat, srcSubCat)
+    init_source(dbStores, sysConfig, srcID, srcPath, srcCat, srcSubCat)
     return srcID
 #fed
 
 # Initialize Src Records
-def init_source(dbStores, srcID, srcPath, srcCat='UNK', srcSubCat='UNK'):
+def init_source(dbStores, sysConfig, srcID, srcPath, srcCat='UNK', srcSubCat='UNK'):
     # Create srcID for new sources Meta Data Record, and set minimum values
     if not srcID in dbStores['docmeta']:
         dbStores['docmeta'][srcID] = {

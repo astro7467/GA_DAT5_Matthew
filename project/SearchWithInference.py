@@ -208,9 +208,9 @@ def search(searchText):
 def index_files():
     dbStores = swi.open_datastores()
     sysConfig = swi.sys_config(dbStores)
+    swi.chk_coredb_keys( dbStores, sysConfig )
 
     swi.trace_log( _logSysLevel, _logConfig, sysConfig, context='sysConfig')
-    swi.chk_coredb_keys( dbStores, sysConfig )
 
     # Index *.TXT files
     srcCat = 'FILE'
