@@ -133,47 +133,47 @@ def tf_word2vec(dbstores, swicfg):
 
         # Ops and variables pinned to the CPU or GPU
         # change to CPU if not on tensorflow-gpu with CDDN & CUDA support
-        with tf.device('/cpu:0'):
-            # Look up embeddings for inputs.
-            embeddings = tf.Variable(
-                tf.random_uniform([vocabulary_size, embeddingSize], -1.0, 1.0))
+        #with tf.device('/cpu:0'):
+        # Look up embeddings for inputs.
+        embeddings = tf.Variable(
+            tf.random_uniform([vocabulary_size, embeddingSize], -1.0, 1.0))
 
-            embed = tf.nn.embedding_lookup(embeddings, trainInputs)
+        embed = tf.nn.embedding_lookup(embeddings, trainInputs)
 
-            # Construct the variables for the NCE loss
-            nceWeights = tf.Variable(
-                tf.truncated_normal(
-                    [vocabulary_size, embeddingSize], stddev=1.0 / math.sqrt(embeddingSize)))
+        # Construct the variables for the NCE loss
+        nceWeights = tf.Variable(
+            tf.truncated_normal(
+                [vocabulary_size, embeddingSize], stddev=1.0 / math.sqrt(embeddingSize)))
 
-            nceBiases = tf.Variable(tf.zeros([vocabulary_size]))
+        nceBiases = tf.Variable(tf.zeros([vocabulary_size]))
 
-            # Compute the average NCE loss for the batch.
-            # tf.nce_loss automatically draws a new sample of the negative labels each
-            # time we evaluate the loss.
-            # Explanation of the meaning of NCE loss:
-            #   http://mccormickml.com/2016/04/19/word2vec-tutorial-the-skip-gram-model/
-            loss = tf.reduce_mean(
-                tf.nn.nce_loss(
-                    weights=nceWeights,
-                    biases=nceBiases,
-                    labels=trainLabels,
-                    inputs=embed,
-                    num_sampled=numSampled,
-                    num_classes=vocabulary_size))
+        # Compute the average NCE loss for the batch.
+        # tf.nce_loss automatically draws a new sample of the negative labels each
+        # time we evaluate the loss.
+        # Explanation of the meaning of NCE loss:
+        #   http://mccormickml.com/2016/04/19/word2vec-tutorial-the-skip-gram-model/
+        loss = tf.reduce_mean(
+            tf.nn.nce_loss(
+                weights=nceWeights,
+                biases=nceBiases,
+                labels=trainLabels,
+                inputs=embed,
+                num_sampled=numSampled,
+                num_classes=vocabulary_size))
 
-            # Construct the SGD optimizer using a learning rate of 1.0.
-            optimizer = tf.train.GradientDescentOptimizer(1.0).minimize(loss)
+        # Construct the SGD optimizer using a learning rate of 1.0.
+        optimizer = tf.train.GradientDescentOptimizer(1.0).minimize(loss)
 
-            # Compute the cosine similarity between minibatch examples and all embeddings.
-            norm = tf.sqrt(tf.reduce_sum(tf.square(embeddings), 1, keep_dims=True))
-            normalizedEmbeddings = embeddings / norm
-            validEmbeddings = tf.nn.embedding_lookup(
-                normalizedEmbeddings, validDataset )
-            similarity = tf.matmul(
-                validEmbeddings, normalizedEmbeddings, transpose_b=True )
+        # Compute the cosine similarity between minibatch examples and all embeddings.
+        norm = tf.sqrt(tf.reduce_sum(tf.square(embeddings), 1, keep_dims=True))
+        normalizedEmbeddings = embeddings / norm
+        validEmbeddings = tf.nn.embedding_lookup(
+            normalizedEmbeddings, validDataset )
+        similarity = tf.matmul(
+            validEmbeddings, normalizedEmbeddings, transpose_b=True )
 
-            # Add variable initializer.
-            init = tf.global_variables_initializer()
+        # Add variable initializer.
+        init = tf.global_variables_initializer()
 
     # Begin training.
     numSteps = 10001
