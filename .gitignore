@@ -29,8 +29,9 @@ celerybeat-schedule
 # Editor backup files
 *~
 
-# project database files
+# project database files/dir/links
 project/data/
+project/corpus
 project/corpus/
 
 # Idea/PyCharm
