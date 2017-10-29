@@ -320,7 +320,7 @@ def search(searchText, similarity=True, openclose=True, dbstores=None, swicfg=No
 
         # if we found additional words, then lets do a 2nd run
         if len(withExtraWords) > len(words):
-            extraSearchText = ''.join([str(word)+' ' for word in withExtraWords])
+            extraSearchText = ' '.join([str(word) for word in withExtraWords])
             search(extraSearchText, similarity=False, openclose=False, dbstores=dbstores, swicfg=swicfg)
 
     if openclose:

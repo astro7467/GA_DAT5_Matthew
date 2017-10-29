@@ -767,59 +767,6 @@ def init_source(dbstores, swicfg, srcID, srcPath, srcCat='UNK', srcSubCat='UNK')
     return
 
 
-def ngram_store_add(dbstores, ngram, srcID):
-    # Record/Add Source with Ngram usage
-
-    ngram = str(ngram)
-    srcID = str(srcID)
-
-    if ngram not in dbstores['ngram']:
-        # initialize item if not already in the master dictionary
-        dbstores['ngram'][ngram] = {srcID:1}
-        trace_log(_logSysLevel, _logTrace, dbstores['ngram'][ngram], context='Created ngram: ' + ngram)
-    elif srcID in dbstores['ngram'][ngram]:
-        # Count finds of ngram in srcID
-        dbstores['ngram'][ngram][srcID] += 1
-        trace_log(_logSysLevel, _logTrace, dbstores['ngram'][ngram], context='Increased (' + ngram + '): ' + srcID)
-    else:
-        #file isn't recorded as a viable match, then add to list
-        dbstores['ngram'][ngram][srcID] = 1
-        trace_log(_logSysLevel, _logTrace, dbstores['ngram'][ngram], context='Added (' + ngram + '): ' + srcID)
-    return
-
-
-def src_ngram_add(dbstores, ngram, lineID, srcID):
-    # Record Source includes ngram, and what lines/paragraphs inc ngram
-
-    ngram = str(ngram)
-    srcID = str(srcID)
-    #lineID = str(lineID)
-
-    if _storeDocMeta_ngrams:
-        # Add ngram's existence into Meta Storage
-        if dbstores['docmeta'][srcID]['ngrams'] == []:
-            dbstores['docmeta'][srcID]['ngrams'] = [ngram]
-            trace_log(_logSysLevel, _logTrace, dbstores['docmeta'][srcID]['ngrams'][-10:], context='DocMeta Created (' + srcID + '):')
-        elif ngram not in dbstores['docmeta'][srcID]['ngrams']:
-            dbstores['docmeta'][srcID]['ngrams'].append(ngram)
-            trace_log(_logSysLevel, _logTrace, dbstores['docmeta'][srcID]['ngrams'][-10:], context='DocMeta Added (' + srcID + '):')
-
-    # Add/initialize ngram and line(s) info Source Statistics
-    if srcID not in dbstores['docstat']:
-        dbstores['docstat'][srcID] = { ngram :[lineID] }
-        trace_log(_logSysLevel, _logInfo, dbstores['docstat'][srcID][ngram][-10:], context='DocStat Created ' + srcID + ' with ngram ' + ngram)
-    elif ngram not in dbstores['docstat'][srcID]:
-        # if ngram hasn't been initialized
-        dbstores['docstat'][srcID][ngram] = [lineID]
-        trace_log(_logSysLevel, _logInfo, dbstores['docstat'][srcID][ngram][-10:], context='DocStat Created ' + srcID + ' / ' + ngram)
-    elif lineID not in dbstores['docstat'][srcID][ngram]:
-        # if line isn't recorded as a viable match, then add to list
-        dbstores['docstat'][srcID][ngram].append(lineID)
-        trace_log(_logSysLevel, _logInfo, dbstores['docstat'][srcID][ngram][-10:], context='DocStat Added to (' + srcID + '): ' + ngram)
-
-    return
-
-
 def tuples2text(tuple):
     text = ''
     for item in tuple:
@@ -842,15 +789,6 @@ def build_ngrams(inputList, width=2):
     return sorted([item for item in outputList if item != ''])
 
 
-def src_line_ngram_storage(dbstores, srcID, lineID, lineNgrams):
-    # For each word/ngram add to master dictionary with FileID & In FileDict
-
-    for item in lineNgrams:
-        #first Record Ngram is in File, then record which lines have the Ngram
-        ngram_store_add(dbstores, item, srcID)
-        src_ngram_add(dbstores, item, lineID, srcID)
-
-
 def normalise_text(text, stopwords=None, recheck=True):
     # Normalize Text Convert text to lower-case and strip punctuation/symbols from words
 
@@ -865,7 +803,7 @@ def normalise_text(text, stopwords=None, recheck=True):
             trace_log(_logSysLevel, _logTrace, normText, context='Normalising with Stopwords')
 
         newText = [str(word) for word in normText.split() if word not in stopwords]
-        normText = ''.join([str(word)+' ' for word in newText])
+        normText = ' '.join([str(word) for word in newText])
 
         if recheck:
             trace_log(_logSysLevel, _logTrace, normText, context='Normalising with Stopwords - newText')
@@ -918,7 +856,7 @@ def normalise_file(dbstores, swicfg, fileName, srcID):
 
             elif dbstores['docmeta'][srcID]['subcat'] == 'CSV':
                 for line in csv.reader(readFile, delimiter=','):
-                    txtLine = ''.join([str(item)+' ' for item in line])
+                    txtLine = ' '.join([str(item) for item in line])
                     normalisedText = normalise_text(txtLine,
                                                     stopwords=dbstores['stopwords']['en'])
                     if normalisedText not in [None, '', ' ']:
@@ -1038,46 +976,6 @@ def chk_coredb_keys(dbstores, swicfg):
     return
 
 
-def ngram_srcdoc(dbstores, swicfg):
-    # Process given file as raw text line by line
-
-    # for each srcID, if not indexed/parsed - then extract ngrams
-    for srcID in dbstores['docmeta']:
-        trace_log(_logSysLevel, _logTrace, {'SrcID':srcID}, context='Parsing')
-
-        # extract ngrams from normalised files
-        if not (not dbstores['docmeta'][srcID]['normalised'] or dbstores['docmeta'][srcID]['indexed']):
-            fileName = os.path.join(swicfg['srcdata'], srcID, 'normal.dat')
-            trace_log(_logSysLevel, _logTrace, {'Filename':fileName}, context='Index Starting')
-
-            if os.path.isfile(fileName):
-                # Generate Vectorization of ngrams and strip stop words
-                vectorizer = CountVectorizer(ngram_range=(1, swicfg['ngram']))
-                ngramAnalyzer = vectorizer.build_analyzer()
-
-                with open(fileName, mode='rU', errors='ignore') as readFile:
-                    # read each line, process ngrams & check for vector dictionary
-                    lineID = 0
-                    for line in readFile:
-                        trace_log(_logSysLevel, _logTrace, {'LineID': lineID, 'Text':line},
-                                   context='Index Processing')
-                        src_line_ngram_storage(dbstores, srcID, lineID, ngramAnalyzer(line))
-                        dict_parse_words(dbstores, swicfg, line.split(), xcheck=True)
-                        lineID += 1
-
-                dbstores['docmeta'][srcID]['indexed'] = True
-                dbstores['docmeta'].sync()
-                dbstores['docstat'].sync()
-                dbstores['ngram'].sync()
-                trace_log(_logSysLevel, _logInfo, {'Filename':fileName},
-                           context='Indexing Finished')
-            else:
-                trace_log(_logSysLevel, _logError, {'Filename':fileName},
-                           context='Indexing File Missing')
-
-    return
-
-
 def vectorize_src(dbstores, swicfg):
     # Scans srcID for missing WordCount and/or Empty Vectorized lists
     # Build the data and populates each
@@ -1113,7 +1011,7 @@ def vectorize_src(dbstores, swicfg):
                     try:
                         vectorList.append(dbstores['dict'][word])
                     except:
-                        trace_log(_logSysLevel, _logInfo, 
+                        trace_log(_logSysLevel, _logInfo,
                                   {'Filename': fileName, 'word': word},
                                   context='Building Vector List - Word not in Dictionary')
                         dict_parse_words(dbstores, swicfg, word, xcheck=True)
@@ -1132,5 +1030,171 @@ def vectorize_src(dbstores, swicfg):
                       dbstores['vectorized'][srcID], context='Producted vectorList')
             trace_log(_logSysLevel, _logInfo,
                       'Filename : '+fileName, context='Finished WordCount & Vectorize Lists')
+
+    return
+
+
+def ngram_srcdoc(dbstores, swicfg):
+    # Process given file as raw text line by line
+
+    # for each srcID, if not indexed/parsed - then extract ngrams
+    for srcID in dbstores['docmeta']:
+        trace_log(_logSysLevel, _logTrace, {'SrcID':srcID}, context='Parsing')
+
+        # extract ngrams from normalised files
+        if not (not dbstores['docmeta'][srcID]['normalised'] or dbstores['docmeta'][srcID]['indexed']):
+            fileName = os.path.join(swicfg['srcdata'], srcID, 'normal.dat')
+            trace_log(_logSysLevel, _logTrace, {'Filename':fileName}, context='Index Starting')
+
+            if os.path.isfile(fileName):
+                # Generate Vectorization of ngrams and strip stop words
+                vectorizer = CountVectorizer(ngram_range=(1, swicfg['ngram']))
+                ngramAnalyzer = vectorizer.build_analyzer()
+
+                with open(fileName, mode='rU', errors='ignore') as readFile:
+                    # read each line, process ngrams & check for vector dictionary
+                    lineID = 0
+                    for line in readFile:
+                        trace_log(_logSysLevel, _logTrace, {'LineID': lineID, 'Text': line},
+                                   context='Index Processing')
+                        src_line_ngram_storage(dbstores, srcID, lineID, ngramAnalyzer(line))
+                        dict_parse_words(dbstores, swicfg, line.split(), xcheck=True)
+                        lineID += 1
+
+                # with open(fileName, mode='rt', errors='ignore') as readFile:
+                #
+                #     # Grab every ngram in file and record of it's existence in srcID
+                #     readFile.seek(0)
+                #     trace_log(_logSysLevel, _logInfo, 'ngram - builing list from file...'+str(fileName))
+                #     ngramList = ngramAnalyzer(readFile.read().replace('\n', ' '))
+                #     docmeta_src_ngrams_add(dbstores, srcID, ngramList)
+                #     trace_log(_logSysLevel, _logInfo,
+                #               {'Filename': fileName, 'nGramCount': len(ngramList), 'ngramSample': ngramList[-50:]},
+                #               context='ngram - builing list from file...finished')
+                #
+                #     trace_log(_logSysLevel, _logInfo, 'ngram - parsing ngram list...')
+                #     for ngram in ngramList:
+                #         ngram_store_add(dbstores, ngram, srcID)
+                #         # if ngram is a single word, ensur eit is in the dictionary
+                #         if len(ngram.split()) == 1:
+                #             dict_parse_words(dbstores, swicfg, ngram, xcheck=True)
+                #     trace_log(_logSysLevel, _logInfo, 'ngram - parsing ngram list...finished')
+
+                dbstores['docmeta'][srcID]['indexed'] = True
+                dbstores['docmeta'].sync()
+                dbstores['docstat'].sync()
+                dbstores['ngram'].sync()
+                trace_log(_logSysLevel, _logInfo, {'Filename':fileName},
+                           context='Indexing Finished')
+            else:
+                trace_log(_logSysLevel, _logError, {'Filename':fileName},
+                           context='Indexing File Missing')
+
+    return
+
+
+def src_line_ngram_storage(dbstores, srcID, lineID, lineNgrams):
+    # For each word/ngram add to master dictionary with FileID & In FileDict
+
+    for item in lineNgrams:
+        #first Record Ngram is in File, then record which lines have the Ngram
+        ngram_store_add(dbstores, item, srcID)
+        src_ngram_add(dbstores, item, lineID, srcID)
+
+    return
+
+
+def ngram_store_add(dbstores, ngram, srcID, count=None):
+    # Record/Add Source with Ngram usage, if count = None, then increment, else count = new total for srcID
+
+    if ngram not in dbstores['ngram']:
+        # initialize item if not already in the master dictionary
+        dbstores['ngram'][ngram] = dict()
+        trace_log(_logSysLevel, _logTrace, 'ngram - Created: '+ngram)
+
+    if srcID not in dbstores['ngram'][ngram]:
+        # SrcID isn't recorded as a viable match, then initialize
+        dbstores['ngram'][ngram][srcID] = 0
+        trace_log(_logSysLevel, _logTrace, 'ngram - New srcID: ' + ngram + ' / ' + srcID)
+
+    if isinstance(count, int):
+        # Absolute/Override call made
+        dbstores['ngram'][ngram][srcID] = count
+        trace_log(_logSysLevel, _logInfo, 'ngram - srcID: ' + ngram + ' / ' + srcID + ' Count Override ' + str(count))
+    else:
+        # Incremental Call made, then increment
+        dbstores['ngram'][ngram][srcID] += 1
+        trace_log(_logSysLevel, _logInfo, 'ngram - srcID Increment: ' + ngram + ' / ' + srcID)
+
+    dbstores['ngram'].sync()
+
+    return
+
+
+def docmeta_src_ngrams_add(dbstores, srcID, ngramList):
+    # Record Sources ngram list in DocMeta, and what lines/paragraphs inc ngram
+
+    # Add ngram's existence into Meta Storage
+    if srcID not in dbstores['docmeta']:
+        dbstores['docmeta'][srcID] = dict()
+
+    dbstores['docmeta'][srcID]['ngrams'] = ngramList
+
+    trace_log(_logSysLevel, _logInfo, dbstores['docmeta'][srcID]['ngrams'][-50:],
+              context='DocMeta updated ' + srcID)
+
+    dbstores['docmeta'].sync()
+
+    return
+
+
+def docstat_src_ngram_lines(dbstores, srcID, ngram, lineList):
+    # Record Sources ngram list in DocMeta, and what lines/paragraphs inc ngram
+
+    # Add ngram's existence into Meta Storage
+    # Add/initialize ngram and line(s) info Source Statistics
+    if srcID not in dbstores['docstat']:
+        dbstores['docstat'][srcID] = dict()
+
+    dbstores['docstat'][srcID][ngram] = lineList
+
+    trace_log(_logSysLevel, _logInfo, dbstores['docstat'][srcID][ngram][-50:],
+              context='DocStat ' + srcID + ' / ' + ngram)
+
+    dbstores['docstat'].sync()
+
+    return
+
+
+def src_ngram_add(dbstores, ngram, lineID, srcID):
+    # Record Source includes ngram, and what lines/paragraphs inc ngram
+
+    # Add ngram's existence into Meta Storage
+    if srcID not in dbstores['docmeta']:
+        dbstores['docmeta'][srcID] = dict()
+
+    if 'ngrams' not in dbstores['docmeta'][srcID]:
+        dbstores['docmeta'][srcID]['ngrams'] = list()
+
+    if ngram not in dbstores['docmeta'][srcID]['ngrams']:
+        dbstores['docmeta'][srcID]['ngrams'].append(ngram)
+        trace_log(_logSysLevel, _logInfo, 'DocStat ' + srcID + ' / ' + ngram)
+
+    dbstores['docmeta'].sync()
+
+    # Add/initialize ngram and line(s) info Source Statistics
+    if srcID not in dbstores['docstat']:
+        dbstores['docstat'][srcID] = dict()
+
+    if ngram not in dbstores['docstat'][srcID]:
+        # if ngram hasn't been initialized
+        dbstores['docstat'][srcID][ngram] = list()
+
+    if lineID not in dbstores['docstat'][srcID][ngram]:
+        # if line isn't recorded as a viable match, then add to list
+        dbstores['docstat'][srcID][ngram].append(lineID)
+        trace_log(_logSysLevel, _logInfo, dbstores['docstat'][srcID][ngram][-10:], context='DocStat Added to (' + srcID + '): ' + ngram)
+
+    dbstores['docstat'].sync()
 
     return
