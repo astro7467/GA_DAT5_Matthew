@@ -21,12 +21,14 @@
 """
 
 import collections
+import contextlib
 import csv
 import itertools
 import math
 import os
 import re
 import random
+import sys
 import time
 import shelve
 import uuid
@@ -37,7 +39,9 @@ import tensorflow as tf
 # from pathlib import Path
 # from simple_shelve import SimpleShelf, SimpleMultiShelf
 
+from bisect import bisect_left
 from sklearn.feature_extraction.text import CountVectorizer  #, TfidfVectorizer
+from tqdm import tqdm
 
 _storeDocMeta_ngrams = True # Storage of ngram list in dbstores['docmeta'] per srcID
 
@@ -49,6 +53,36 @@ _logInfo = 3
 _logTrace = 4
 _logSysLevel = _logTrace
 # _logSysLevel = _logStatus
+
+# see https://pypi.python.org/pypi/tqdm for how to use tqdm
+
+class DummyTqdmFile(object):
+    """Dummy file-like that will write to tqdm"""
+    file = None
+    def __init__(self, file):
+        self.file = file
+
+    def write(self, x):
+        # Avoid print() second call (useless \n)
+        if len(x.rstrip()) > 0:
+            tqdm.write(x, file=self.file)
+
+    def flush(self):
+        return getattr(self.file, "flush", lambda: None)()
+
+@contextlib.contextmanager
+def std_out_err_redirect_tqdm():
+    orig_out_err = sys.stdout, sys.stderr
+    try:
+        sys.stdout, sys.stderr = map(DummyTqdmFile, orig_out_err)
+        yield orig_out_err[0]
+    # Relay exceptions
+    except Exception as exc:
+        raise exc
+    # Always restore sys.stdout/err if necessary
+    finally:
+        sys.stdout, sys.stderr = orig_out_err
+
 
 
 def tf_word2vec(dbstores, swicfg):
@@ -194,59 +228,64 @@ def tf_word2vec(dbstores, swicfg):
         init.run()
         trace_log(_logSysLevel, _logInfo, 'Initialized', context='Word2Vec')
 
-        averageLoss = 0
-        for step in range(numSteps):
-            dataIndex, batchInputs, batchLabels = tf_w2v_generate_batch(dataIndex, batchSize, numSkips, skipWindow)
-            feedDict = {trainInputs: batchInputs, trainLabels: batchLabels}
+        # Redirect stdout to tqdm.write() (don't forget the `as save_stdout`)
+        # Enables tqdm to control progress bar on screen location
+        with swi.std_out_err_redirect_tqdm() as orig_stdout:
+            # tqdm needs the original stdout
+            # and dynamic_ncols=True to autodetect console width
+            averageLoss = 0
+            for step in tqdm(range(numSteps), file=orig_stdout, dynamic_ncols=True):
+                dataIndex, batchInputs, batchLabels = tf_w2v_generate_batch(dataIndex, batchSize, numSkips, skipWindow)
+                feedDict = {trainInputs: batchInputs, trainLabels: batchLabels}
 
-            # We perform one update step by evaluating the optimizer op (including it
-            # in the list of returned values for session.run()
-            _, lossVal = session.run([optimizer, loss], feed_dict=feedDict)
-            averageLoss += lossVal
+                # We perform one update step by evaluating the optimizer op (including it
+                # in the list of returned values for session.run()
+                _, lossVal = session.run([optimizer, loss], feed_dict=feedDict)
+                averageLoss += lossVal
 
-            if step % 2000 == 0:
-                if step > 0:
-                    averageLoss /= 2000
+                if step % 2000 == 0:
+                    if step > 0:
+                        averageLoss /= 2000
 
-                # The average loss is an estimate of the loss over the last 2000 batches.
-                trace_log(_logSysLevel, _logInfo,
-                          'Average loss at step '+str(step)+': '+str(averageLoss), context='Word2Vec')
-                averageLoss = 0
+                    # The average loss is an estimate of the loss over the last 2000 batches.
+                    trace_log(_logSysLevel, _logInfo,
+                              'Average loss at step '+str(step)+': '+str(averageLoss), context='Word2Vec')
+                    averageLoss = 0
 
-            # Note that this is expensive (~20% slowdown if computed every 500 steps)
-            if step % 1000 == 0:
-                trace_log(_logSysLevel, _logInfo, 'Validation Set Similarity Comparisions', context='Word2Vec')
-                sim = similarity.eval()
-                ngramList = list()
+                # Note that this is expensive (~20% slowdown if computed every 500 steps)
+                if step % 1000 == 0:
+                    trace_log(_logSysLevel, _logInfo, 'Validation Set Similarity Comparisions', context='Word2Vec')
+                    sim = similarity.eval()
+                    ngramList = list()
 
-                for i in range(validSize):
-                    validWordList = list()
-                    validWord = w2vdbstore['revdict'][validExamples[i]]
-                    logStr = 'Nearest to %s:' % validWord
-                    topK = 8  # number of nearest neighbors
-                    nearest = (-sim[i, :]).argsort()[1:topK + 1]
+                    for i in range(validSize):
+                        validWordList = list()
+                        validWord = w2vdbstore['revdict'][validExamples[i]]
+                        logStr = 'Nearest to %s:' % validWord
+                        topK = 8  # number of nearest neighbors
+                        nearest = (-sim[i, :]).argsort()[1:topK + 1]
 
-                    for k in range(topK):
-                        if nearest[k] in w2vdbstore['revdict']:
-                            closeWord = w2vdbstore['revdict'][nearest[k]]
-                            validWordList.append(closeWord)
-                            logStr = '%s %s,' % (logStr, closeWord)
-                        elif nearest[k] in dbstores['vectors']['vectors']:
-                            closeWord = dbstores['vectors']['vectors'][nearest[k]]
-                            validWordList.append(closeWord)
-                            logStr = '%s %s*,' % (logStr, closeWord)
-                        else:
-                            logStr = '%s (%s),' % (logStr, nearest[k])
+                        for k in range(topK):
+                            if nearest[k] in w2vdbstore['revdict']:
+                                closeWord = w2vdbstore['revdict'][nearest[k]]
+                                validWordList.append(closeWord)
+                                logStr = '%s %s,' % (logStr, closeWord)
+                            elif nearest[k] in dbstores['vectors']['vectors']:
+                                closeWord = dbstores['vectors']['vectors'][nearest[k]]
+                                validWordList.append(closeWord)
+                                logStr = '%s %s*,' % (logStr, closeWord)
+                            else:
+                                logStr = '%s (%s),' % (logStr, nearest[k])
 
-                    trace_log(_logSysLevel, _logInfo, logStr, context='Word2Vec')
+                        trace_log(_logSysLevel, _logInfo, logStr, context='Word2Vec')
 
-                    for word in validWordList:
-                        ngramList.append(str(validWord + ' ' + word))
-                        ngramList.append(str(word + ' ' + validWord))
+                        for word in validWordList:
+                            ngramList.append(str(validWord + ' ' + word))
+                            ngramList.append(str(word + ' ' + validWord))
 
-                ngramCounts, unseenNgrams, _ = ngram_counts(dbstores, ngramList)
-                trace_log(_logSysLevel, _logTrace, ngramCounts, context='Word2Vec ngram Counts')
-                trace_log(_logSysLevel, _logTrace, unseenNgrams, context='Word2Vec Unseen ngram')
+                    ngramCounts, unseenNgrams, _ = ngram_counts(dbstores, ngramList)
+                    trace_log(_logSysLevel, _logTrace, ngramCounts, context='Word2Vec ngram Counts')
+                    trace_log(_logSysLevel, _logTrace, unseenNgrams, context='Word2Vec Unseen ngram')
 
         trace_log(_logSysLevel, _logStatus, 'Calculating Full Similarity Data...', context='Word2Vec - Similarity')
         # Store full similarity data calcs for extraction
@@ -255,37 +294,43 @@ def tf_word2vec(dbstores, swicfg):
     # Store Similiarity Results
     trace_log(_logSysLevel, _logStatus,
               'Storing Similarity Data', context='Word2Vec - Similarity')
-    for vector in w2vdbstore['vectorset']:
-        if vector in dbstores['vectors']['vectors']:
-            wordList = list()
-            word = dbstores['vectors']['vectors'][vector]
-            logStr = 'Nearest to %s:' % word
-            topK = 8  # number of nearest neighbors we will keep
-            try:
-                nearest = (-fullSim[vector, :]).argsort()[1:topK + 1]
-                for distance in range(topK):
-                    if nearest[distance] in dbstores['vectors']['vectors']:
-                        closeWord = dbstores['vectors']['vectors'][nearest[distance]]
-                        wordList.append(closeWord)
-                        logStr = '%s %s,' % (logStr, closeWord)
-                    else:
-                        logStr = '%s (%s),' % (logStr, nearest[distance])
+    # Redirect stdout to tqdm.write() (don't forget the `as save_stdout`)
+    # Enables tqdm to control progress bar on screen location
+    with swi.std_out_err_redirect_tqdm() as orig_stdout:
+        # tqdm needs the original stdout
+        # and dynamic_ncols=True to autodetect console width
 
-                trace_log(_logSysLevel, _logTrace, logStr, context='Word2Vec - Similarity')
+        for vector in tqdm(w2vdbstore['vectorset'], file=orig_stdout, dynamic_ncols=True):
+            if vector in dbstores['vectors']['vectors']:
+                wordList = list()
+                word = dbstores['vectors']['vectors'][vector]
+                logStr = 'Nearest to %s:' % word
+                topK = 8  # number of nearest neighbors we will keep
+                try:
+                    nearest = (-fullSim[vector, :]).argsort()[1:topK + 1]
+                    for distance in range(topK):
+                        if nearest[distance] in dbstores['vectors']['vectors']:
+                            closeWord = dbstores['vectors']['vectors'][nearest[distance]]
+                            wordList.append(closeWord)
+                            logStr = '%s %s,' % (logStr, closeWord)
+                        else:
+                            logStr = '%s (%s),' % (logStr, nearest[distance])
 
-            except:
+                    trace_log(_logSysLevel, _logTrace, logStr, context='Word2Vec - Similarity')
+
+                except:
+                    trace_log(_logSysLevel, _logTrace,
+                              {'msg': 'Invalid Similarity Vector', 'vector': vector},
+                              context='Word2Vec - Similarity')
+
+                # Only save / overwrite existing data if we have something
+                # expensive to get data, so don't destroy previous learnings
+                if not len(wordList) == 0:
+                    dbstores['similarity'][word] = wordList
+                    dbstores['similarity'].sync()
+            else:
                 trace_log(_logSysLevel, _logTrace,
-                          {'msg': 'Invalid Similarity Vector', 'vector': vector},
-                          context='Word2Vec - Similarity')
-
-            # Only save / overwrite existing data if we have something
-            # expensive to get data, so don't destroy previous learnings
-            if not len(wordList) == 0:
-                dbstores['similarity'][word] = wordList
-                dbstores['similarity'].sync()
-        else:
-            trace_log(_logSysLevel, _logTrace,
-                      {'msg': 'Invalid Training Vector', 'vector': vector}, context='Word2Vec - Similarity')
+                          {'msg': 'Invalid Training Vector', 'vector': vector}, context='Word2Vec - Similarity')
 
     w2vdbstore.close()
     return
@@ -329,10 +374,13 @@ def ngram_counts(dbstores, ngramList):
     return ngramCounts, unseenNgrams, srcNgramCounts
 
 
-def dictionary_vector(dbstores):
+def dictionary_vector(dbstores, lowest=False):
     # increment vector available and return
 
     nextVector = dbstores['config']['nextvector']
+
+    if lowest:
+        nextVector = 0
 
     # Validate we have a free Vector
     while nextVector in dbstores['vectors']['vectors']:
@@ -408,44 +456,6 @@ def dict_parse_words(dbstores, swicfg, words, xcheck=False):
 
     dbstores['dict'].sync()
     dbstores['vectors'].sync()
-    return
-
-
-def validate_dict():
-    # Step through Dictionary and validate Vector Mappings
-
-    trace_log(_logSysLevel, _logStatus, 'Validating Dictionary...')
-    dbstores = open_datastores()
-    swicfg = sys_config(dbstores)
-    total = len(dbstores['dict'].keys())
-
-    trace_log(_logSysLevel, _logStatus, 'Checking Vector...')
-    minVector = max(dbstores['vectors']['vectors'].keys())
-    vector = dictionary_vector(dbstores)
-
-    if vector <= minVector:
-        oldVector = vector
-        dbstores['config']['nextvector'] = minVector + 1
-        dbstores['config'].sync()
-        vector = dictionary_vector(dbstores)
-        trace_log(_logSysLevel, _logStatus,
-                   {'OldVector': oldVector, 'NewVector': vector, 'MinVector': minVector},
-                   context='Bad Next Vector Found')
-
-    step = 0
-    for word in list(dbstores['dict'].keys()):
-        dict_parse_words(dbstores, swicfg, [word], xcheck=True)
-        if step % 100 == 0:
-            trace_log(_logSysLevel, _logStatus,
-                      'Progress: ' + str(count).rjust(len(str(total))+1) + ' of ' + str(total) + ' Last Vector: ' + str(dbstores['config']['nextvector']) + ' - ' + word)
-        step += 1
-
-    trace_log(_logSysLevel, _logStatus,
-               'Number of keys Dict: '+str(len(dbstores['dict'].keys())))
-    trace_log(_logSysLevel, _logStatus,
-               'Number of keys Vect: '+str(len(dbstores['vectors']['vectors'].keys())))
-
-    close_datastores(dbstores)
     return
 
 
@@ -1051,44 +1061,68 @@ def ngram_srcdoc(dbstores, swicfg):
                 vectorizer = CountVectorizer(ngram_range=(1, swicfg['ngram']))
                 ngramAnalyzer = vectorizer.build_analyzer()
 
-                with open(fileName, mode='rU', errors='ignore') as readFile:
-                    # read each line, process ngrams & check for vector dictionary
-                    lineID = 0
-                    for line in readFile:
-                        trace_log(_logSysLevel, _logTrace, {'LineID': lineID, 'Text': line},
-                                   context='Index Processing')
-                        src_line_ngram_storage(dbstores, srcID, lineID, ngramAnalyzer(line))
-                        dict_parse_words(dbstores, swicfg, line.split(), xcheck=True)
-                        lineID += 1
+                # with open(fileName, mode='rU', errors='ignore') as readFile:
+                #     # read each line, process ngrams & check for vector dictionary
+                #     lineID = 0
+                #     for line in readFile:
+                #         trace_log(_logSysLevel, _logTrace, {'LineID': lineID, 'Text': line},
+                #                    context='Index Processing')
+                #         src_line_ngram_storage(dbstores, srcID, lineID, ngramAnalyzer(line))
+                #         dict_parse_words(dbstores, swicfg, line.split(), xcheck=True)
+                #         lineID += 1
 
-                # with open(fileName, mode='rt', errors='ignore') as readFile:
-                #
-                #     # Grab every ngram in file and record of it's existence in srcID
-                #     readFile.seek(0)
-                #     trace_log(_logSysLevel, _logInfo, 'ngram - builing list from file...'+str(fileName))
-                #     ngramList = ngramAnalyzer(readFile.read().replace('\n', ' '))
-                #     docmeta_src_ngrams_add(dbstores, srcID, ngramList)
-                #     trace_log(_logSysLevel, _logInfo,
-                #               {'Filename': fileName, 'nGramCount': len(ngramList), 'ngramSample': ngramList[-50:]},
-                #               context='ngram - builing list from file...finished')
-                #
-                #     trace_log(_logSysLevel, _logInfo, 'ngram - parsing ngram list...')
-                #     for ngram in ngramList:
-                #         ngram_store_add(dbstores, ngram, srcID)
-                #         # if ngram is a single word, ensur eit is in the dictionary
-                #         if len(ngram.split()) == 1:
-                #             dict_parse_words(dbstores, swicfg, ngram, xcheck=True)
-                #     trace_log(_logSysLevel, _logInfo, 'ngram - parsing ngram list...finished')
+                # Redirect stdout to tqdm.write() (don't forget the `as save_stdout`)
+                # Enables tqdm to control progress bar on screen location
+                with swi.std_out_err_redirect_tqdm() as orig_stdout:
+                # tqdm needs the original stdout
+                # and dynamic_ncols=True to autodetect console width
+                    with open(fileName, mode='rt', errors='ignore') as readFile:
+
+                        # Build a list of line end (\n) locations before replacing them
+                        # the index of the match is the line number/ LineID
+                        trace_log(_logSysLevel, _logInfo, 'ngram - '+str(fileName)+' builing lin ends list from file...')
+                        readFile.seek(0)
+                        lineEndIndex = [match.start() for match in re.finditer(r'\n', readFile.read())]
+                        lineEndIndex.sort()
+
+                        # Grab every ngram in file and record of it's existence in srcID
+                        # Will also create & record ngram's across line breaks
+                        trace_log(_logSysLevel, _logInfo,  'ngram - '+str(fileName)+' builing list from file...')
+                        readFile.seek(0)
+                        ngramList = ngramAnalyzer(readFile.read().replace('\n', ' '))
+                        docmeta_src_ngrams_add(dbstores, srcID, ngramList)
+                        trace_log(_logSysLevel, _logInfo,
+                                  {'Filename': fileName, 'nGramCount': len(ngramList), 'ngramSample': ngramList[-50:]},
+                                  context= 'ngram - '+str(fileName)+' builing list from file...finished')
+
+                        trace_log(_logSysLevel, _logInfo,  'ngram - '+str(fileName)+' parsing ngram list for Line & Dictionary...')
+                        for ngram in tqdm(ngramList, file=orig_stdout, dynamic_ncols=True):
+                            ngram_store_add(dbstores, ngram, srcID)
+
+                            # if ngram is a single word, ensure it is in the dictionary
+                            if len(ngram.split(' ')) == 1:
+                                dict_parse_words(dbstores, swicfg, ngram, xcheck=True)
+
+                            # Capture the starting index of every ngram, even if it crosses a line break
+                            readFile.seek(0)
+                            ngramIndex = [match.start() for match in re.finditer(re.escape(ngram),
+                                                                                 readFile.read().replace('\n', ' '))]
+                            # For every position, find the last indexed line end, so we are on the next line (+1)
+                            lineList = [bisect_left(lineEndIndex, index) + 1 for index in ngramIndex]
+                            ngram_store_add(dbstores, ngram, srcID, count=len(lineList))
+
+                            # note; set results are sorted for pure numeric values
+                            docstat_src_ngram_lines(dbstores, srcID, ngram, list(set(lineList)))
+
+                        trace_log(_logSysLevel, _logInfo,  'ngram - '+str(fileName)+' parsing ngram list...finished')
 
                 dbstores['docmeta'][srcID]['indexed'] = True
                 dbstores['docmeta'].sync()
                 dbstores['docstat'].sync()
                 dbstores['ngram'].sync()
-                trace_log(_logSysLevel, _logInfo, {'Filename':fileName},
-                           context='Indexing Finished')
+                trace_log(_logSysLevel, _logInfo, 'ngram - '+str(fileName)+' Indexing Finished')
             else:
-                trace_log(_logSysLevel, _logError, {'Filename':fileName},
-                           context='Indexing File Missing')
+                trace_log(_logSysLevel, _logError, 'ngram - '+str(fileName)+' Indexing File Missing')
 
     return
 

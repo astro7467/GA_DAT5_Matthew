@@ -29,6 +29,8 @@ import sys
 
 import swi_lib as swi
 
+from tqdm import tqdm
+
 # import numpy as np
 # import tensorflow as tf
 
@@ -103,30 +105,37 @@ def word2vec():
 
     swi.trace_log(_logSysLevel, _logInfo,
                   'Building Consolidated Vector List...', context='Word2Vec')
-    for srcID in dbstores['docmeta']:
-        swi.trace_log(_logSysLevel, _logTrace,
-                      srcID, context='Word2Vec - Checking srcID')
 
-        # if dbstores['docmeta'][srcID]['vector'] and srcID in dbstores['vectorized']:
-        if srcID in dbstores['vectorized']:
-            if len(dbstores['vectorized'][srcID]) > 0 \
-                    and len(dbstores['docmeta'][srcID]['wordcount']) > 0:
+    # Redirect stdout to tqdm.write() (don't forget the `as save_stdout`)
+    # Enables tqdm to control progress bar on screen location
+    with swi.std_out_err_redirect_tqdm() as orig_stdout:
+        # tqdm needs the original stdout
+        # and dynamic_ncols=True to autodetect console width
 
-                swi.trace_log(_logSysLevel, _logTrace,
-                              srcID, context='Word2Vec - Adding srcID')
-                w2vdbstore['vectors'].extend(dbstores['vectorized'][srcID])
+        for srcID in tqdm(dbstores['docmeta'], file=orig_stdout, dynamic_ncols=True):
+            swi.trace_log(_logSysLevel, _logTrace,
+                          srcID, context='Word2Vec - Checking srcID')
 
-                swi.trace_log(_logSysLevel, _logTrace,
-                              srcID, context='Word2Vec - Updating Vector Set')
-                w2vdbstore['vectorset'].update(dbstores['vectorized'][srcID])
+            # if dbstores['docmeta'][srcID]['vector'] and srcID in dbstores['vectorized']:
+            if srcID in tqdm(dbstores['vectorized'], file=orig_stdout, dynamic_ncols=True):
+                if len(dbstores['vectorized'][srcID]) > 0 \
+                        and len(dbstores['docmeta'][srcID]['wordcount']) > 0:
 
-                w2vdbstore.sync()
-                swi.trace_log(_logSysLevel, _logTrace,
-                              w2vdbstore['vectors'], context='Word2Vec - Extended vectors')
+                    swi.trace_log(_logSysLevel, _logTrace,
+                                  srcID, context='Word2Vec - Adding srcID')
+                    w2vdbstore['vectors'].extend(dbstores['vectorized'][srcID])
 
-                wordCounts += dbstores['docmeta'][srcID]['wordcount']
-                swi.trace_log(_logSysLevel, _logTrace,
-                              wordCounts, context='Word2Vec - Updated wordCounts')
+                    swi.trace_log(_logSysLevel, _logTrace,
+                                  srcID, context='Word2Vec - Updating Vector Set')
+                    w2vdbstore['vectorset'].update(dbstores['vectorized'][srcID])
+
+                    w2vdbstore.sync()
+                    swi.trace_log(_logSysLevel, _logTrace,
+                                  w2vdbstore['vectors'], context='Word2Vec - Extended vectors')
+
+                    wordCounts += dbstores['docmeta'][srcID]['wordcount']
+                    swi.trace_log(_logSysLevel, _logTrace,
+                                  wordCounts, context='Word2Vec - Updated wordCounts')
 
     swi.trace_log(_logSysLevel, _logInfo,
                   w2vdbstore['vectors'], context='Word2Vec - Consolidated Vectors')
@@ -378,25 +387,30 @@ def validate_dict():
     swi.trace_log(_logSysLevel, _logStatus, 'Validating Dictionary...')
     dbstores = swi.open_datastores()
     swicfg = swi.sys_config(dbstores)
-    count = 0
     total = len(dbstores['dict'].keys())
 
     swi.trace_log(_logSysLevel, _logStatus, 'Checking Vector...')
-    minVector = max(dbstores['vectors']['vectors'].keys())
-    vector = swi.dictionary_vector(dbstores)
+    # minVector = max(dbstores['vectors']['vectors'].keys())
+    # vector = swi.dictionary_vector(dbstores, lowest=True)
 
-    if vector <= minVector:
-        oldVector = vector
-        dbstores['config']['nextvector'] = minVector + 1
-        dbstores['config'].sync()
-        vector = swi.dictionary_vector(dbstores)
-        swi.trace_log(_logSysLevel, _logStatus, {'OldVector': oldVector, 'NewVector': vector, 'MinVector': minVector}, context='Bad Next Vector Found')
+    # if vector <= minVector:
+    #   oldVector = vector
+    #   dbstores['config']['nextvector'] = minVector
+    #   dbstores['config'].sync()
+    #   vector = swi.dictionary_vector(dbstores)
+    #   swi.trace_log(_logSysLevel, _logStatus, {'OldVector': oldVector, 'NewVector': vector, 'MinVector': minVector}, context='Bad Next Vector Found')
 
-    for word in list(dbstores['dict'].keys()):
-        swi.dict_parse_words(dbstores, swicfg, [word], xcheck=True)
-        if count % 100 == 0:
-            swi.trace_log(_logSysLevel, _logStatus, 'Progress: ' + str(count).rjust(len(str(total))+1) + ' of ' + str(total) + ' Last Vector: ' + str(dbstores['config']['nextvector']) + ' - ' + word)
-        count += 1
+    # Redirect stdout to tqdm.write() (don't forget the `as save_stdout`)
+    # Enables tqdm to control progress bar on screen location
+    with swi.std_out_err_redirect_tqdm() as orig_stdout:
+        # tqdm needs the original stdout
+        # and dynamic_ncols=True to autodetect console width
+        # count = 0
+        for word in tqdm(list(dbstores['dict'].keys()), file=orig_stdout, dynamic_ncols=True, desc='Words/Vectors'):
+            swi.dict_parse_words(dbstores, swicfg, [word], xcheck=True)
+            # if count % 100 == 0:
+            #     swi.trace_log(_logSysLevel, _logStatus, 'Progress: ' + str(count).rjust(len(str(total))+1) + ' of ' + str(total) + ' Last Vector: ' + str(dbstores['config']['nextvector']) + ' - ' + word)
+            # count += 1
 
     swi.trace_log(_logSysLevel, _logStatus, 'Number of keys Dict: ' + str(len(dbstores['dict'].keys())))
     swi.trace_log(_logSysLevel, _logStatus, 'Number of keys Vect: ' + str(len(dbstores['vectors']['vectors'].keys())))
@@ -457,4 +471,3 @@ def main(argv):
 
 if __name__ == '__main__':
     main(sys.argv[1:])
-
