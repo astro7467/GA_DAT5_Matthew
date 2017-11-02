@@ -1111,15 +1111,16 @@ def ngram_srcdoc(dbstores, swicfg):
                         # Capture the starting index of every ngram, even if it crosses a line break
                         # readFile.seek(0)
                         # ngramIndex = [match.start() for match in re.finditer(re.escape(ngram), readFile.read().replace('\n', ' '))]
-                        ngramIndex = [match.start() for match in re.finditer(re.escape(ngram), readFileInMem)]
+                        # ngramIndex = [match.start() for match in re.finditer(re.escape(ngram), readFileInMem)]
 
                         # del readFileInMem
-                        
+
                         # For every position, find the last indexed line end, so we are on the next line (+1)
                         # note; set returns results sorted when purely numeric values
                         # lineList = [bisect_left(lineEndIndex, index) + 1 for index in ngramIndex]
                         # docstat_src_ngram_lines(dbstores, srcID, ngram, list(set(lineList)))
-                        srcIDngramLineList[ngram] = list(set([bisect_left(lineEndIndex, index) + 1 for index in ngramIndex]))
+                        # srcIDngramLineList[ngram] = list(set([bisect_left(lineEndIndex, index) + 1 for index in ngramIndex]))
+                        srcIDngramLineList[ngram] = list(set([bisect_left(lineEndIndex, index) + 1 for index in [match.start() for match in re.finditer(re.escape(ngram), readFileInMem)]]))
 
                         # ngram_store_add(dbstores, ngram, srcID, count=len(lineList))
                         srcIDngramCount[ngram] = len(srcIDngramLineList[ngram])
@@ -1148,6 +1149,8 @@ def ngram_full_src_update(dbstores, srcID, srcIDngramCount):
     # tqdm needs the original stdout
     # and dynamic_ncols=True to autodetect console width
         for ngram in tqdm(srcIDngramCount, desc='Updating '+srcID, file=orig_stdout, dynamic_ncols=True):
+            if ngram not in dbstores['ngram']:
+                dbstores['ngram'][ngram] = dict{}
             dbstores['ngram'][ngram][srcID] = srcIDngramCount[ngram]
         dbstores['ngram'].sync()
     return
