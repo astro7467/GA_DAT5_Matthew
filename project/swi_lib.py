@@ -1101,7 +1101,6 @@ def ngram_srcdoc(dbstores, swicfg):
 
                     trace_log(_logSysLevel, _logInfo,  'ngram - '+str(fileName)+' parsing ngram list for Line & Dictionary...')
                     for ngram in tqdm(ngramList, file=orig_stdout, dynamic_ncols=True):
-                        ngram_store_add(dbstores, ngram, srcID)
 
                         # if ngram is a single word, ensure it is in the dictionary
                         if len(ngram.split(' ')) == 1:
