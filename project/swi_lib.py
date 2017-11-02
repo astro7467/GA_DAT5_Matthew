@@ -230,7 +230,7 @@ def tf_word2vec(dbstores, swicfg):
 
         # Redirect stdout to tqdm.write() (don't forget the `as save_stdout`)
         # Enables tqdm to control progress bar on screen location
-        with swi.std_out_err_redirect_tqdm() as orig_stdout:
+        with std_out_err_redirect_tqdm() as orig_stdout:
             # tqdm needs the original stdout
             # and dynamic_ncols=True to autodetect console width
             averageLoss = 0
@@ -296,7 +296,7 @@ def tf_word2vec(dbstores, swicfg):
               'Storing Similarity Data', context='Word2Vec - Similarity')
     # Redirect stdout to tqdm.write() (don't forget the `as save_stdout`)
     # Enables tqdm to control progress bar on screen location
-    with swi.std_out_err_redirect_tqdm() as orig_stdout:
+    with std_out_err_redirect_tqdm() as orig_stdout:
         # tqdm needs the original stdout
         # and dynamic_ncols=True to autodetect console width
 
@@ -1073,14 +1073,14 @@ def ngram_srcdoc(dbstores, swicfg):
 
                 # Redirect stdout to tqdm.write() (don't forget the `as save_stdout`)
                 # Enables tqdm to control progress bar on screen location
-                with swi.std_out_err_redirect_tqdm() as orig_stdout:
+                with std_out_err_redirect_tqdm() as orig_stdout:
                 # tqdm needs the original stdout
                 # and dynamic_ncols=True to autodetect console width
                     with open(fileName, mode='rt', errors='ignore') as readFile:
 
                         # Build a list of line end (\n) locations before replacing them
                         # the index of the match is the line number/ LineID
-                        trace_log(_logSysLevel, _logInfo, 'ngram - '+str(fileName)+' builing lin ends list from file...')
+                        trace_log(_logSysLevel, _logInfo, 'ngram - '+str(fileName)+' building line index from file...')
                         readFile.seek(0)
                         lineEndIndex = [match.start() for match in re.finditer(r'\n', readFile.read())]
                         lineEndIndex.sort()
