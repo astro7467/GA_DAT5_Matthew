@@ -1077,46 +1077,49 @@ def ngram_srcdoc(dbstores, swicfg):
                 # tqdm needs the original stdout
                 # and dynamic_ncols=True to autodetect console width
                     with open(fileName, mode='rt', errors='ignore') as readFile:
-
-                        # Build a list of line end (\n) locations before replacing them
-                        # the index of the match is the line number/ LineID
-                        trace_log(_logSysLevel, _logInfo, 'ngram - '+str(fileName)+' building line index from file...')
                         readFile.seek(0)
-                        lineEndIndex = [match.start() for match in re.finditer(r'\n', readFile.read())]
-                        lineEndIndex.sort()
+                        readFileInMem = readFile.read()
 
-                        # Grab every ngram in file and record of it's existence in srcID
-                        # Will also create & record ngram's across line breaks
-                        trace_log(_logSysLevel, _logInfo,  'ngram - '+str(fileName)+' builing list from file...')
-                        readFile.seek(0)
-                        ngramList = ngramAnalyzer(readFile.read().replace('\n', ' '))
-                        docmeta_src_ngrams_add(dbstores, srcID, ngramList)
-                        trace_log(_logSysLevel, _logInfo,
-                                  {'Filename': fileName, 'nGramCount': len(ngramList), 'ngramSample': ngramList[-50:]},
-                                  context= 'ngram - '+str(fileName)+' builing list from file...finished')
+                    # Build a list of line end (\n) locations before replacing them
+                    # the index of the match is the line number/ LineID
+                    trace_log(_logSysLevel, _logInfo, 'ngram - '+str(fileName)+' building line index from file...')
+                    # readFile.seek(0)
+                    lineEndIndex = [match.start() for match in re.finditer(r'\n', readFileInMem)]
+                    lineEndIndex.sort()
 
-                        trace_log(_logSysLevel, _logInfo,  'ngram - '+str(fileName)+' parsing ngram list for Line & Dictionary...')
-                        for ngram in tqdm(ngramList, file=orig_stdout, dynamic_ncols=True):
-                            ngram_store_add(dbstores, ngram, srcID)
+                    readFileInMem.replace('\n', ' ')
 
-                            # if ngram is a single word, ensure it is in the dictionary
-                            if len(ngram.split(' ')) == 1:
-                                dict_parse_words(dbstores, swicfg, ngram, xcheck=True)
+                    # Grab every ngram in file and record of it's existence in srcID
+                    # Will also create & record ngram's across line breaks
+                    trace_log(_logSysLevel, _logInfo,  'ngram - '+str(fileName)+' builing list from file...')
+                    # readFile.seek(0)
+                    ngramList = ngramAnalyzer(readFileInMem)
+                    docmeta_src_ngrams_add(dbstores, srcID, ngramList)
+                    trace_log(_logSysLevel, _logInfo,
+                              {'Filename': fileName, 'nGramCount': len(ngramList), 'ngramSample': ngramList[-50:]},
+                              context= 'ngram - '+str(fileName)+' builing list from file...finished')
 
-                            # Capture the starting index of every ngram, even if it crosses a line break
-                            readFile.seek(0)
-                            ngramIndex = [match.start() for match in re.finditer(re.escape(ngram),
-                                                                                 readFile.read().replace('\n', ' '))]
-                            # For every position, find the last indexed line end, so we are on the next line (+1)
-                            lineList = [bisect_left(lineEndIndex, index) + 1 for index in ngramIndex]
-                            ngram_store_add(dbstores, ngram, srcID, count=len(lineList))
+                    trace_log(_logSysLevel, _logInfo,  'ngram - '+str(fileName)+' parsing ngram list for Line & Dictionary...')
+                    for ngram in tqdm(ngramList, file=orig_stdout, dynamic_ncols=True):
+                        ngram_store_add(dbstores, ngram, srcID)
 
-                            # note; set results are sorted for pure numeric values
-                            docstat_src_ngram_lines(dbstores, srcID, ngram, list(set(lineList)))
+                        # if ngram is a single word, ensure it is in the dictionary
+                        if len(ngram.split(' ')) == 1:
+                            dict_parse_words(dbstores, swicfg, ngram, xcheck=True)
 
-                        trace_log(_logSysLevel, _logInfo,  'ngram - '+str(fileName)+' parsing ngram list...finished')
+                        # Capture the starting index of every ngram, even if it crosses a line break
+                        # readFile.seek(0)
+                        ngramIndex = [match.start() for match in re.finditer(re.escape(ngram), readFileInMem)]
+                        # For every position, find the last indexed line end, so we are on the next line (+1)
+                        lineList = [bisect_left(lineEndIndex, index) + 1 for index in ngramIndex]
+                        ngram_store_add(dbstores, ngram, srcID, count=len(lineList))
 
-                dbstores['docmeta'][srcID]['indexed'] = True
+                        # note; set results are sorted for pure numeric values
+                        docstat_src_ngram_lines(dbstores, srcID, ngram, list(set(lineList)))
+
+                    trace_log(_logSysLevel, _logInfo,  'ngram - '+str(fileName)+' parsing ngram list...finished')
+
+                # dbstores['docmeta'][srcID]['indexed'] = True
                 dbstores['docmeta'].sync()
                 dbstores['docstat'].sync()
                 dbstores['ngram'].sync()
