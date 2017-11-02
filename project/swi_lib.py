@@ -1074,8 +1074,8 @@ def ngram_srcdoc(dbstores, swicfg):
                 # Redirect stdout to tqdm.write() (don't forget the `as save_stdout`)
                 # Enables tqdm to control progress bar on screen location
                 with std_out_err_redirect_tqdm() as orig_stdout:
-                # tqdm needs the original stdout
-                # and dynamic_ncols=True to autodetect console width
+                    # tqdm needs the original stdout
+                    # and dynamic_ncols=True to autodetect console width
                     with open(fileName, mode='rt', errors='ignore') as readFile:
                         readFile.seek(0)
                         readFileInMem = readFile.read()
@@ -1084,8 +1084,7 @@ def ngram_srcdoc(dbstores, swicfg):
                     # the index of the match is the line number/ LineID
                     trace_log(_logSysLevel, _logInfo, 'ngram - '+str(fileName)+' building line index from file...')
                     # readFile.seek(0)
-                    lineEndIndex = [match.start() for match in re.finditer(r'\n', readFileInMem)]
-                    lineEndIndex.sort()
+                    lineEndIndex = sorted([match.start() for match in re.finditer(r'\n', readFileInMem)])
 
                     readFileInMem.replace('\n', ' ')
 
@@ -1100,23 +1099,32 @@ def ngram_srcdoc(dbstores, swicfg):
                               context= 'ngram - '+str(fileName)+' builing list from file...finished')
 
                     trace_log(_logSysLevel, _logInfo,  'ngram - '+str(fileName)+' parsing ngram list for Line & Dictionary...')
+                    srcIDngramCount = dict()
+                    srcIDngramLineList = dict()
                     for ngram in tqdm(ngramList, file=orig_stdout, dynamic_ncols=True):
 
                         # if ngram is a single word, ensure it is in the dictionary
                         if len(ngram.split(' ')) == 1:
-                            dict_parse_words(dbstores, swicfg, ngram, xcheck=True)
+                            dict_parse_words(dbstores, swicfg, ngram, xcheck=False)
 
                         # Capture the starting index of every ngram, even if it crosses a line break
                         # readFile.seek(0)
                         ngramIndex = [match.start() for match in re.finditer(re.escape(ngram), readFileInMem)]
-                        # For every position, find the last indexed line end, so we are on the next line (+1)
-                        lineList = [bisect_left(lineEndIndex, index) + 1 for index in ngramIndex]
-                        ngram_store_add(dbstores, ngram, srcID, count=len(lineList))
 
-                        # note; set results are sorted for pure numeric values
-                        docstat_src_ngram_lines(dbstores, srcID, ngram, list(set(lineList)))
+                        # For every position, find the last indexed line end, so we are on the next line (+1)
+                        # note; set returns results sorted when purely numeric values
+                        # lineList = [bisect_left(lineEndIndex, index) + 1 for index in ngramIndex]
+                        # docstat_src_ngram_lines(dbstores, srcID, ngram, list(set(lineList)))
+                        srcIDngramLineList[ngram] = list(set([bisect_left(lineEndIndex, index) + 1 for index in ngramIndex]))
+
+                        # ngram_store_add(dbstores, ngram, srcID, count=len(lineList))
+                        srcIDngramCount[ngram] = len(srcIDngramLineList[ngram])
+
 
                     trace_log(_logSysLevel, _logInfo,  'ngram - '+str(fileName)+' parsing ngram list...finished')
+
+                    ngram_full_src_update(dbstores, srcID, srcIDngramCount)
+                    docstat_full_src_update(dbstores, srcID, srcIDngramLineList)
 
                 # dbstores['docmeta'][srcID]['indexed'] = True
                 dbstores['docmeta'].sync()
@@ -1126,6 +1134,24 @@ def ngram_srcdoc(dbstores, swicfg):
             else:
                 trace_log(_logSysLevel, _logError, 'ngram - '+str(fileName)+' Indexing File Missing')
 
+    return
+
+
+def ngram_full_src_update(dbstores, srcID, srcIDngramCount):
+    # Redirect stdout to tqdm.write() (don't forget the `as save_stdout`)
+    # Enables tqdm to control progress bar on screen location
+    with std_out_err_redirect_tqdm() as orig_stdout:
+    # tqdm needs the original stdout
+    # and dynamic_ncols=True to autodetect console width
+        for ngram in tqdm(srcIDngramCount, desc='Updating '+srcID, file=orig_stdout, dynamic_ncols=True):
+            dbstores['ngram'][ngram][srcID] = srcIDngramCount[ngram]
+        dbstores['ngram'].sync()
+    return
+
+
+def docstat_full_src_update(dbstores, srcID, srcIDngramLineList):
+    dbstores['docstat'][srcID] = srcIDngramLineList
+    dbstores['docstat'].sync()
     return
 
 
