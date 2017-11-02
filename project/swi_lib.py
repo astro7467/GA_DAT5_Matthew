@@ -1092,7 +1092,7 @@ def ngram_srcdoc(dbstores, swicfg):
                     # readFile.seek(0)
                     # ngramList = sorted(ngramAnalyzer(readFile.read().replace('\n', ' ')))
                     readFileInMem.replace('\n', ' ')
-                    ngramList = sorted(ngramAnalyzer(readFileInMem))
+                    ngramList = sorted(list(set(ngramAnalyzer(readFileInMem))))
 
                     docmeta_src_ngrams_add(dbstores, srcID, ngramList)
                     trace_log(_logSysLevel, _logInfo,
@@ -1113,7 +1113,7 @@ def ngram_srcdoc(dbstores, swicfg):
                         # ngramIndex = [match.start() for match in re.finditer(re.escape(ngram), readFile.read().replace('\n', ' '))]
                         ngramIndex = [match.start() for match in re.finditer(re.escape(ngram), readFileInMem)]
 
-                        del readFileInMem
+                        # del readFileInMem
                         
                         # For every position, find the last indexed line end, so we are on the next line (+1)
                         # note; set returns results sorted when purely numeric values
