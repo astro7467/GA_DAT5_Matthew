@@ -1077,47 +1077,52 @@ def ngram_srcdoc(dbstores, swicfg):
                     # tqdm needs the original stdout
                     # and dynamic_ncols=True to autodetect console width
                     with open(fileName, mode='rt', errors='ignore') as readFile:
-                        # readFileInMem = readFile.read()
+                        readFileInMem = readFile.read()
 
-                        # Build a list of line end (\n) locations before replacing them
-                        # the index of the match is the line number/ LineID
-                        trace_log(_logSysLevel, _logInfo, 'ngram - '+str(fileName)+' building line index from file...')
-                        readFile.seek(0)
-                        lineEndIndex = sorted([match.start() for match in re.finditer(r'\n', readFile.read())])
+                    # Build a list of line end (\n) locations before replacing them
+                    # the index of the match is the line number/ LineID
+                    trace_log(_logSysLevel, _logInfo, 'ngram - '+str(fileName)+' building line index from file...')
+                    # readFile.seek(0)
+                    # lineEndIndex = sorted([match.start() for match in re.finditer(r'\n', readFile.read())])
+                    lineEndIndex = sorted([match.start() for match in re.finditer(r'\n', readFileInMem)])
 
-                        # readFileInMem.replace('\n', ' ')
+                    # Grab every ngram in file and record of it's existence in srcID
+                    # Will also create & record ngram's across line breaks
+                    trace_log(_logSysLevel, _logInfo,  'ngram - '+str(fileName)+' builing list from file...')
+                    # readFile.seek(0)
+                    # ngramList = sorted(ngramAnalyzer(readFile.read().replace('\n', ' ')))
+                    readFileInMem.replace('\n', ' ')
+                    ngramList = sorted(ngramAnalyzer(readFileInMem))
 
-                        # Grab every ngram in file and record of it's existence in srcID
-                        # Will also create & record ngram's across line breaks
-                        trace_log(_logSysLevel, _logInfo,  'ngram - '+str(fileName)+' builing list from file...')
-                        readFile.seek(0)
-                        ngramList = ngramAnalyzer(readFile.read().replace('\n', ' '))
-                        docmeta_src_ngrams_add(dbstores, srcID, ngramList)
-                        trace_log(_logSysLevel, _logInfo,
-                                  {'Filename': fileName, 'nGramCount': len(ngramList), 'ngramSample': ngramList[-50:]},
-                                  context= 'ngram - '+str(fileName)+' builing list from file...finished')
+                    docmeta_src_ngrams_add(dbstores, srcID, ngramList)
+                    trace_log(_logSysLevel, _logInfo,
+                              {'Filename': fileName, 'nGramCount': len(ngramList), 'ngramSample': ngramList[-50:]},
+                              context= 'ngram - '+str(fileName)+' builing list from file...finished')
 
-                        trace_log(_logSysLevel, _logInfo,  'ngram - '+str(fileName)+' parsing ngram list for Line & Dictionary...')
-                        srcIDngramCount = dict()
-                        srcIDngramLineList = dict()
-                        for ngram in tqdm(ngramList, file=orig_stdout, dynamic_ncols=True):
+                    trace_log(_logSysLevel, _logInfo,  'ngram - '+str(fileName)+' parsing ngram list for Line & Dictionary...')
+                    srcIDngramCount = dict()
+                    srcIDngramLineList = dict()
+                    for ngram in tqdm(ngramList, file=orig_stdout, dynamic_ncols=True):
 
-                            # if ngram is a single word, ensure it is in the dictionary
-                            if len(ngram.split(' ')) == 1:
-                                dict_parse_words(dbstores, swicfg, ngram, xcheck=False)
+                        # if ngram is a single word, ensure it is in the dictionary
+                        if len(ngram.split(' ')) == 1:
+                            dict_parse_words(dbstores, swicfg, ngram, xcheck=False)
 
-                            # Capture the starting index of every ngram, even if it crosses a line break
-                            readFile.seek(0)
-                            ngramIndex = [match.start() for match in re.finditer(re.escape(ngram), readFile.read().replace('\n', ' '))]
+                        # Capture the starting index of every ngram, even if it crosses a line break
+                        # readFile.seek(0)
+                        # ngramIndex = [match.start() for match in re.finditer(re.escape(ngram), readFile.read().replace('\n', ' '))]
+                        ngramIndex = [match.start() for match in re.finditer(re.escape(ngram), readFileInMem)]
 
-                            # For every position, find the last indexed line end, so we are on the next line (+1)
-                            # note; set returns results sorted when purely numeric values
-                            # lineList = [bisect_left(lineEndIndex, index) + 1 for index in ngramIndex]
-                            # docstat_src_ngram_lines(dbstores, srcID, ngram, list(set(lineList)))
-                            srcIDngramLineList[ngram] = list(set([bisect_left(lineEndIndex, index) + 1 for index in ngramIndex]))
+                        del readFileInMem
+                        
+                        # For every position, find the last indexed line end, so we are on the next line (+1)
+                        # note; set returns results sorted when purely numeric values
+                        # lineList = [bisect_left(lineEndIndex, index) + 1 for index in ngramIndex]
+                        # docstat_src_ngram_lines(dbstores, srcID, ngram, list(set(lineList)))
+                        srcIDngramLineList[ngram] = list(set([bisect_left(lineEndIndex, index) + 1 for index in ngramIndex]))
 
-                            # ngram_store_add(dbstores, ngram, srcID, count=len(lineList))
-                            srcIDngramCount[ngram] = len(srcIDngramLineList[ngram])
+                        # ngram_store_add(dbstores, ngram, srcID, count=len(lineList))
+                        srcIDngramCount[ngram] = len(srcIDngramLineList[ngram])
 
 
                     trace_log(_logSysLevel, _logInfo,  'ngram - '+str(fileName)+' parsing ngram list...finished')
