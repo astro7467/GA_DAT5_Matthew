@@ -459,7 +459,7 @@ def dict_parse_words(dbstores, swicfg, words, xcheck=False):
     return
 
 
-def trace_log(sysLogLevel=_logSysLevel, logType=_logInfo, logData='', context=''):
+def trace_log(sysLogLevel: int = _logSysLevel, logType: int = _logInfo, logData: object = '', context: str = '') -> object:
     # Common Logging/Trace Routine
 
     logTypes = ('ERROR', 'STATUS', 'CONFIG', 'INFO', 'TRACE')
@@ -476,9 +476,9 @@ def trace_log(sysLogLevel=_logSysLevel, logType=_logInfo, logData='', context=''
         logMaxLines = 12
         maxLineLen = 180
 
-        if (isinstance(logData, str) or isinstance(logData, int) or isinstance(logData, float)):
+        if isinstance(logData, str) or isinstance(logData, int) or isinstance(logData, float):
             logTextList = [logText + str(logData).strip()[:maxLineLen]]
-        elif (isinstance(logData, list) or isinstance(logData, tuple)):
+        elif isinstance(logData, list) or isinstance(logData, tuple):
             firstItem = True
             logText += ' Length '+str(len(logData))+', Type '+str(type(logData))+' - '
 
@@ -874,7 +874,6 @@ def normalise_file(dbstores, swicfg, fileName, srcID):
 
     trace_log(_logSysLevel, _logTrace,
               {'outFile':outFile, 'Filename':fileName}, context='Normalised File Finished')
-
     return
 
 
@@ -1061,16 +1060,6 @@ def ngram_srcdoc(dbstores, swicfg):
                 vectorizer = CountVectorizer(ngram_range=(1, swicfg['ngram']))
                 ngramAnalyzer = vectorizer.build_analyzer()
 
-                # with open(fileName, mode='rU', errors='ignore') as readFile:
-                #     # read each line, process ngrams & check for vector dictionary
-                #     lineID = 0
-                #     for line in readFile:
-                #         trace_log(_logSysLevel, _logTrace, {'LineID': lineID, 'Text': line},
-                #                    context='Index Processing')
-                #         src_line_ngram_storage(dbstores, srcID, lineID, ngramAnalyzer(line))
-                #         dict_parse_words(dbstores, swicfg, line.split(), xcheck=True)
-                #         lineID += 1
-
                 # Redirect stdout to tqdm.write() (don't forget the `as save_stdout`)
                 # Enables tqdm to control progress bar on screen location
                 with std_out_err_redirect_tqdm() as orig_stdout:
@@ -1082,15 +1071,11 @@ def ngram_srcdoc(dbstores, swicfg):
                     # Build a list of line end (\n) locations before replacing them
                     # the index of the match is the line number/ LineID
                     trace_log(_logSysLevel, _logInfo, 'ngram - '+str(fileName)+' building line index from file...')
-                    # readFile.seek(0)
-                    # lineEndIndex = sorted([match.start() for match in re.finditer(r'\n', readFile.read())])
                     lineEndIndex = sorted([match.start() for match in re.finditer(r'\n', readFileInMem)])
 
                     # Grab every ngram in file and record of it's existence in srcID
                     # Will also create & record ngram's across line breaks
                     trace_log(_logSysLevel, _logInfo,  'ngram - '+str(fileName)+' builing list from file...')
-                    # readFile.seek(0)
-                    # ngramList = sorted(ngramAnalyzer(readFile.read().replace('\n', ' ')))
                     readFileInMem.replace('\n', ' ')
                     ngramList = sorted(list(set(ngramAnalyzer(readFileInMem))))
 
@@ -1109,29 +1094,17 @@ def ngram_srcdoc(dbstores, swicfg):
                             dict_parse_words(dbstores, swicfg, ngram, xcheck=False)
 
                         # Capture the starting index of every ngram, even if it crosses a line break
-                        # readFile.seek(0)
-                        # ngramIndex = [match.start() for match in re.finditer(re.escape(ngram), readFile.read().replace('\n', ' '))]
-                        # ngramIndex = [match.start() for match in re.finditer(re.escape(ngram), readFileInMem)]
-
-                        # del readFileInMem
-
                         # For every position, find the last indexed line end, so we are on the next line (+1)
                         # note; set returns results sorted when purely numeric values
-                        # lineList = [bisect_left(lineEndIndex, index) + 1 for index in ngramIndex]
-                        # docstat_src_ngram_lines(dbstores, srcID, ngram, list(set(lineList)))
-                        # srcIDngramLineList[ngram] = list(set([bisect_left(lineEndIndex, index) + 1 for index in ngramIndex]))
                         srcIDngramLineList[ngram] = list(set([bisect_left(lineEndIndex, index) + 1 for index in [match.start() for match in re.finditer(re.escape(ngram), readFileInMem)]]))
-
-                        # ngram_store_add(dbstores, ngram, srcID, count=len(lineList))
                         srcIDngramCount[ngram] = len(srcIDngramLineList[ngram])
-
 
                     trace_log(_logSysLevel, _logInfo,  'ngram - '+str(fileName)+' parsing ngram list...finished')
 
                     ngram_full_src_update(dbstores, srcID, srcIDngramCount)
                     docstat_full_src_update(dbstores, srcID, srcIDngramLineList)
 
-                # dbstores['docmeta'][srcID]['indexed'] = True
+                dbstores['docmeta'][srcID]['indexed'] = True
                 dbstores['docmeta'].sync()
                 dbstores['docstat'].sync()
                 dbstores['ngram'].sync()
