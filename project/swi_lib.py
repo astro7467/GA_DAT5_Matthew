@@ -70,6 +70,7 @@ class DummyTqdmFile(object):
     def flush(self):
         return getattr(self.file, "flush", lambda: None)()
 
+
 @contextlib.contextmanager
 def std_out_err_redirect_tqdm():
     orig_out_err = sys.stdout, sys.stderr
@@ -84,7 +85,6 @@ def std_out_err_redirect_tqdm():
         sys.stdout, sys.stderr = orig_out_err
 
 
-
 def tf_word2vec(dbstores, swicfg):
     # Tensorflow Word2Vec Model Training
     # Backtrack a little bit to avoid skipping words in the end of a batch
@@ -93,7 +93,6 @@ def tf_word2vec(dbstores, swicfg):
 
     vectors_size = len(w2vdbstore['vectors'])
     vocabulary_size = max(w2vdbstore['revdict'].keys()) + 1
-    #vector_set_size = len(w2vdbstore['revdict'])
     dataIndex = 0
 
     # Function to generate a training batch for the skip-gram model.
@@ -169,9 +168,6 @@ def tf_word2vec(dbstores, swicfg):
         validDataset = tf.constant(validExamples, dtype=tf.int32)
         fullDataset = tf.constant(sorted(w2vdbstore['vectorset']), dtype=tf.int32)
 
-        # Ops and variables pinned to the CPU or GPU
-        # change to CPU if not on tensorflow-gpu with CDDN & CUDA support
-        #with tf.device('/cpu:0'):
         # Look up embeddings for inputs.
         embeddings = tf.Variable(
             tf.random_uniform([vocabulary_size, embeddingSize], -1.0, 1.0))
@@ -206,86 +202,78 @@ def tf_word2vec(dbstores, swicfg):
         norm = tf.sqrt(tf.reduce_sum(tf.square(embeddings), 1, keep_dims=True))
         normalizedEmbeddings = embeddings / norm
 
-        validEmbeddings = tf.nn.embedding_lookup(
-            normalizedEmbeddings, validDataset)
-        similarity = tf.matmul(
-            validEmbeddings, normalizedEmbeddings, transpose_b=True)
+        validEmbeddings = tf.nn.embedding_lookup(normalizedEmbeddings, validDataset)
 
-        fullEmbeddings = tf.nn.embedding_lookup(
-            normalizedEmbeddings, fullDataset)
-        fullSimilarity = tf.matmul(
-            fullEmbeddings, normalizedEmbeddings, transpose_b=True)
+        similarity = tf.matmul(validEmbeddings, normalizedEmbeddings, transpose_b=True)
+
+        fullEmbeddings = tf.nn.embedding_lookup(normalizedEmbeddings, fullDataset)
+
+        fullSimilarity = tf.matmul(fullEmbeddings, normalizedEmbeddings, transpose_b=True)
 
         # Add variable initializer.
         init = tf.global_variables_initializer()
 
     # Begin training.
     numSteps = 10001
-    #numSteps = 101
 
     with tf.Session(graph=graph) as session:
         # We must initialize all variables before we use them.
         init.run()
         trace_log(_logSysLevel, _logInfo, 'Initialized', context='Word2Vec')
 
-        # Redirect stdout to tqdm.write() (don't forget the `as save_stdout`)
-        # Enables tqdm to control progress bar on screen location
-        with std_out_err_redirect_tqdm() as orig_stdout:
-            # tqdm needs the original stdout
-            # and dynamic_ncols=True to autodetect console width
-            averageLoss = 0
-            for step in tqdm(range(numSteps), file=orig_stdout, dynamic_ncols=True):
-                dataIndex, batchInputs, batchLabels = tf_w2v_generate_batch(dataIndex, batchSize, numSkips, skipWindow)
-                feedDict = {trainInputs: batchInputs, trainLabels: batchLabels}
+        averageLoss = 0
+        for step in tqdm(range(numSteps), dynamic_ncols=True, position=0):
+            dataIndex, batchInputs, batchLabels = tf_w2v_generate_batch(dataIndex, batchSize, numSkips, skipWindow)
+            feedDict = {trainInputs: batchInputs, trainLabels: batchLabels}
 
-                # We perform one update step by evaluating the optimizer op (including it
-                # in the list of returned values for session.run()
-                _, lossVal = session.run([optimizer, loss], feed_dict=feedDict)
-                averageLoss += lossVal
+            # We perform one update step by evaluating the optimizer op (including it
+            # in the list of returned values for session.run()
+            _, lossVal = session.run([optimizer, loss], feed_dict=feedDict)
+            averageLoss += lossVal
 
-                if step % 2000 == 0:
-                    if step > 0:
-                        averageLoss /= 2000
+            if step % 2000 == 0:
+                if step > 0:
+                    averageLoss /= 2000
 
-                    # The average loss is an estimate of the loss over the last 2000 batches.
-                    trace_log(_logSysLevel, _logInfo,
-                              'Average loss at step '+str(step)+': '+str(averageLoss), context='Word2Vec')
-                    averageLoss = 0
+                # The average loss is an estimate of the loss over the last 2000 batches.
+                trace_log(_logSysLevel, _logInfo,
+                          'Average loss at step '+str(step)+': '+str(averageLoss), context='Word2Vec')
+                averageLoss = 0
 
-                # Note that this is expensive (~20% slowdown if computed every 500 steps)
-                if step % 1000 == 0:
-                    trace_log(_logSysLevel, _logInfo, 'Validation Set Similarity Comparisions', context='Word2Vec')
-                    sim = similarity.eval()
-                    ngramList = list()
+            # Note that this is expensive (~20% slowdown if computed every 500 steps)
+            if step % 1000 == 0:
+                trace_log(_logSysLevel, _logInfo, 'Validation Set Similarity Comparisions', context='Word2Vec')
+                sim = similarity.eval()
+                ngramList = list()
 
-                    for i in range(validSize):
-                        validWordList = list()
-                        validWord = w2vdbstore['revdict'][validExamples[i]]
-                        logStr = 'Nearest to %s:' % validWord
-                        topK = 8  # number of nearest neighbors
-                        nearest = (-sim[i, :]).argsort()[1:topK + 1]
+                for i in range(validSize):
+                    validWordList = list()
+                    validWord = w2vdbstore['revdict'][validExamples[i]]
+                    logStr = 'Nearest to %s:' % validWord
+                    topK = 8  # number of nearest neighbors
+                    nearest = (-sim[i, :]).argsort()[1:topK + 1]
 
-                        for k in range(topK):
-                            if nearest[k] in w2vdbstore['revdict']:
-                                closeWord = w2vdbstore['revdict'][nearest[k]]
-                                validWordList.append(closeWord)
-                                logStr = '%s %s,' % (logStr, closeWord)
-                            elif nearest[k] in dbstores['vectors']['vectors']:
-                                closeWord = dbstores['vectors']['vectors'][nearest[k]]
-                                validWordList.append(closeWord)
-                                logStr = '%s %s*,' % (logStr, closeWord)
-                            else:
-                                logStr = '%s (%s),' % (logStr, nearest[k])
+                    for k in range(topK):
+                        if nearest[k] in w2vdbstore['revdict']:
+                            closeWord = w2vdbstore['revdict'][nearest[k]]
+                            validWordList.append(closeWord)
+                            logStr = '%s %s,' % (logStr, closeWord)
+                        elif nearest[k] in dbstores['vectors']['vectors']:
+                            closeWord = dbstores['vectors']['vectors'][nearest[k]]
+                            validWordList.append(closeWord)
+                            logStr = '%s %s*,' % (logStr, closeWord)
+                        else:
+                            logStr = '%s (%s),' % (logStr, nearest[k])
 
-                        trace_log(_logSysLevel, _logInfo, logStr, context='Word2Vec')
+                    trace_log(_logSysLevel, _logInfo, logStr, context='Word2Vec')
 
-                        for word in validWordList:
-                            ngramList.append(str(validWord + ' ' + word))
-                            ngramList.append(str(word + ' ' + validWord))
+                    for word in validWordList:
+                        ngramList.append(str(validWord + ' ' + word))
+                        ngramList.append(str(word + ' ' + validWord))
 
-                    ngramCounts, unseenNgrams, _ = ngram_counts(dbstores, ngramList)
-                    trace_log(_logSysLevel, _logTrace, ngramCounts, context='Word2Vec ngram Counts')
-                    trace_log(_logSysLevel, _logTrace, unseenNgrams, context='Word2Vec Unseen ngram')
+                ngramCounts, unseenNgrams, _ = ngram_counts(dbstores, ngramList)
+                trace_log(_logSysLevel, _logTrace, ngramCounts, context='Word2Vec ngram Counts')
+                trace_log(_logSysLevel, _logTrace, unseenNgrams, context='Word2Vec Unseen ngram')
 
         trace_log(_logSysLevel, _logStatus, 'Calculating Full Similarity Data...', context='Word2Vec - Similarity')
         # Store full similarity data calcs for extraction
@@ -294,43 +282,38 @@ def tf_word2vec(dbstores, swicfg):
     # Store Similiarity Results
     trace_log(_logSysLevel, _logStatus,
               'Storing Similarity Data', context='Word2Vec - Similarity')
-    # Redirect stdout to tqdm.write() (don't forget the `as save_stdout`)
-    # Enables tqdm to control progress bar on screen location
-    with std_out_err_redirect_tqdm() as orig_stdout:
-        # tqdm needs the original stdout
-        # and dynamic_ncols=True to autodetect console width
 
-        for vector in tqdm(w2vdbstore['vectorset'], file=orig_stdout, dynamic_ncols=True):
-            if vector in dbstores['vectors']['vectors']:
-                wordList = list()
-                word = dbstores['vectors']['vectors'][vector]
-                logStr = 'Nearest to %s:' % word
-                topK = 8  # number of nearest neighbors we will keep
-                try:
-                    nearest = (-fullSim[vector, :]).argsort()[1:topK + 1]
-                    for distance in range(topK):
-                        if nearest[distance] in dbstores['vectors']['vectors']:
-                            closeWord = dbstores['vectors']['vectors'][nearest[distance]]
-                            wordList.append(closeWord)
-                            logStr = '%s %s,' % (logStr, closeWord)
-                        else:
-                            logStr = '%s (%s),' % (logStr, nearest[distance])
+    for vector in tqdm(w2vdbstore['vectorset'], dynamic_ncols=True, position=0):
+        if vector in dbstores['vectors']['vectors']:
+            wordList = list()
+            word = dbstores['vectors']['vectors'][vector]
+            logStr = 'Nearest to %s:' % word
+            topK = 8  # number of nearest neighbors we will keep
+            try:
+                nearest = (-fullSim[vector, :]).argsort()[1:topK + 1]
+                for distance in range(topK):
+                    if nearest[distance] in dbstores['vectors']['vectors']:
+                        closeWord = dbstores['vectors']['vectors'][nearest[distance]]
+                        wordList.append(closeWord)
+                        logStr = '%s %s,' % (logStr, closeWord)
+                    else:
+                        logStr = '%s (%s),' % (logStr, nearest[distance])
 
-                    trace_log(_logSysLevel, _logTrace, logStr, context='Word2Vec - Similarity')
+                trace_log(_logSysLevel, _logTrace, logStr, context='Word2Vec - Similarity')
 
-                except:
-                    trace_log(_logSysLevel, _logTrace,
-                              {'msg': 'Invalid Similarity Vector', 'vector': vector},
-                              context='Word2Vec - Similarity')
-
-                # Only save / overwrite existing data if we have something
-                # expensive to get data, so don't destroy previous learnings
-                if not len(wordList) == 0:
-                    dbstores['similarity'][word] = wordList
-                    dbstores['similarity'].sync()
-            else:
+            except:
                 trace_log(_logSysLevel, _logTrace,
-                          {'msg': 'Invalid Training Vector', 'vector': vector}, context='Word2Vec - Similarity')
+                          {'msg': 'Invalid Similarity Vector', 'vector': vector},
+                          context='Word2Vec - Similarity')
+
+            # Only save / overwrite existing data if we have something
+            #   - expensive to get data, so don't destroy previous learnings
+            if not len(wordList) == 0:
+                dbstores['similarity'][word] = wordList
+                dbstores['similarity'].sync()
+        else:
+            trace_log(_logSysLevel, _logTrace,
+                      {'msg': 'Invalid Training Vector', 'vector': vector}, context='Word2Vec - Similarity')
 
     w2vdbstore.close()
     return
@@ -415,9 +398,9 @@ def dict_parse_words(dbstores, swicfg, words, xcheck=False):
             if dbstores['dict'][word] not in dbstores['vectors']['vectors']:
                 # Missing Vector -> Word
                 vector = dbstores['dict'][word]
-                dbstores['vectors']['vectors'][vector] = word
-
                 dbstores['dict'].sync()
+
+                dbstores['vectors']['vectors'][vector] = word
                 dbstores['vectors'].sync()
 
                 trace_log(_logSysLevel, _logStatus, {word: vector}, context='Dictionary Fixed - Missing Vector Key')
@@ -426,9 +409,9 @@ def dict_parse_words(dbstores, swicfg, words, xcheck=False):
                 # found an invalid vector word/vector pair???
                 vector = dictionary_vector(dbstores)
                 dbstores['dict'][word] = vector
-                dbstores['vectors']['vectors'][vector] = word
-
                 dbstores['dict'].sync()
+
+                dbstores['vectors']['vectors'][vector] = word
                 dbstores['vectors'].sync()
 
                 trace_log(_logSysLevel, _logStatus, {word: vector}, context='Dictionary Fixed - Bad Vector')
@@ -444,18 +427,15 @@ def dict_parse_words(dbstores, swicfg, words, xcheck=False):
                 # assign new vector to oldword
                 newVector = dictionary_vector(dbstores)
                 dbstores['dict'][oldword] = newVector
-                dbstores['vectors']['vectors'][newVector] = oldword
-
                 dbstores['dict'].sync()
+
+                dbstores['vectors']['vectors'][newVector] = oldword
                 dbstores['vectors'].sync()
 
                 trace_log(_logSysLevel, _logStatus, {word: dbstores['dict'][word], oldword: newVector}, context='Dictionary Fixed - Bad X Vector')
 
             if not normalise_text(word) == word:
                 trace_log(_logSysLevel, _logStatus, {word: dbstores['dict'][word], dbstores['dict'][word]: dbstores['vectors']['vectors'][dbstores['dict'][word]]}, context='Dictionary Warning - Word Failed Normalised Scan')
-
-    dbstores['dict'].sync()
-    dbstores['vectors'].sync()
     return
 
 
@@ -519,20 +499,15 @@ def trace_log(sysLogLevel: int = _logSysLevel, logType: int = _logInfo, logData:
             logText = newLinePrefix + str(logData).strip()[:maxLineLen]
             logTextList += [str(logText)]
 
-        for line in logTextList: print(line)
+        for line in logTextList: tqdm.write(line)
     return
 
 
 def calc_matches(dbstores, ngramList, maxResults=12):
     # find N best matches of given Ngrams vs Ngram Index
-
-    srcNgramCounts = {}     # Store Raw per SrcID, by ngram counts
-    ngramCounts = {}        # Per ngram how many unique (srcID) counts
     ngramWeights = {}       # Weight of each ngram in calcing srcID's value
     srcWeightedScore = {}   # Weight of each ngram in calcing srcID's value
     ngramWeightBase = 0.0   # Count we will base weight on (i.e. total ngram matches)
-    srcNgramScore = {}      # Weighted score of match for each srcID
-    unseenNgrams = []
 
     ngramCounts, unseenNgrams, srcNgramCounts = ngram_counts(dbstores, ngramList)
 
@@ -604,52 +579,26 @@ def open_datastores(setWriteback=True):
 
     dbstores = dict()
 
+    dbstore_files = { 'config': './data/config',
+                      'dict': './data/dictionary',
+                      'docmeta': './data/docmeta',
+                      'docstat': './data/docstat',
+                      'ngram': './data/ngram',
+                      'sources': './data/sources',
+                      'similarity': './data/similarity',
+                      'stopwords': './data/stopwords',
+                      'vectors': './data/vectors',
+                      'vectorized': './data/vectorized' }
+
     trace_log(_logSysLevel, _logInfo, 'Started Opening dbstores...')
 
-    # Config Datastore
-    dbstores['config'] = shelve.open('./data/config',
-                                     flag='c', protocol=4, writeback=setWriteback)
-
-    # Dictionary to Vectore Datastore
-    dbstores['dict'] = shelve.open('./data/dictionary',
-                                   flag='c', protocol=4, writeback=setWriteback)
-
-    # Document Meta Data Datastore
-    dbstores['docmeta'] = shelve.open('./data/docmeta',
-                                      flag='c', protocol=4, writeback=setWriteback)
-
-    # Document Stats (file ngrams) Datastore
-    dbstores['docstat'] = shelve.open('./data/docstat',
-                                      flag='c', protocol=4, writeback=setWriteback)
-
-    # Ngram Datastore (Core index)
-    dbstores['ngram'] = shelve.open('./data/ngram',
-                                    flag='c', protocol=4, writeback=setWriteback)
-
-    #file Type/Path to UUID Datastore
-    dbstores['sources'] = shelve.open('./data/sources',
-                                      flag='c', protocol=4, writeback=setWriteback)
-
-    # Stopword Lists by Language (eg en) Datastore
-    dbstores['similarity'] = shelve.open('./data/similarity',
-                                        flag='c', protocol=4, writeback=setWriteback)
-
-    # Stopword Lists by Language (eg en) Datastore
-    dbstores['stopwords'] = shelve.open('./data/stopwords',
-                                        flag='c', protocol=4, writeback=setWriteback)
-
-    # Vector to Dictionary Datastore
-    dbstores['vectors'] = shelve.open('./data/vectors',
-                                      flag='c', protocol=4, writeback=setWriteback)
+    for dbstore in tqdm(dbstore_files, desc='Datastore Open', dynamic_ncols=True, position=0):
+        dbstores[dbstore] = shelve.open(dbstore_files[dbstore], flag='c', protocol=4, writeback=setWriteback)
 
     # As shelves mandates str for keys, we create a dict inside with int keys for vectors
-    # open()/close()/sync() need to occur against 'vectors' not ['vectors]['vectors']
+    # open()/close()/sync() need to occur against ['vectors'] not ['vectors]['vectors']
     if 'vectors' not in dbstores['vectors']:
         dbstores['vectors']['vectors'] = dict()
-
-    # Vectorized version of normalizeds and de-stopworded source document
-    dbstores['vectorized'] = shelve.open('./data/vectorized',
-                                         flag='c', protocol=4, writeback=setWriteback)
 
     trace_log(_logSysLevel, _logInfo, 'Finished Opening dbstores')
 
@@ -738,9 +687,8 @@ def sys_config(dbstores):
         swicfg['version'] = dbstores['config']['version']
     except:
         dbstores['config']['version'] = 0.1
+        dbstores['config'].sync()
         swicfg['version'] = dbstores['config']['version']
-
-    dbstores['config'].sync()
 
     trace_log(_logSysLevel, _logInfo, 'Read swicfg in from dbStore')
 
@@ -981,7 +929,6 @@ def chk_coredb_keys(dbstores, swicfg):
             dbstores['vectorized'][srcID] = list()
 
         dbstores['vectorized'].sync()
-
     return
 
 
@@ -1026,12 +973,13 @@ def vectorize_src(dbstores, swicfg):
                         dict_parse_words(dbstores, swicfg, word, xcheck=True)
                         vectorList.append(dbstores['dict'][word])
 
-            dbstores['docmeta'][srcID]['wordcount'] = wordCount
             dbstores['vectorized'][srcID] = vectorList
-            dbstores['docmeta'][srcID]['vector'] = True
-
-            dbstores['docmeta'].sync()
             dbstores['vectorized'].sync()
+
+            dbstores['docmeta'][srcID]['wordcount'] = wordCount
+            dbstores['docmeta'][srcID]['vector'] = True
+            dbstores['docmeta'].sync()
+
 
             trace_log(_logSysLevel, _logTrace,
                       dbstores['docmeta'][srcID]['wordcount'], context='Producted wordCount')
@@ -1043,89 +991,12 @@ def vectorize_src(dbstores, swicfg):
     return
 
 
-def ngram_srcdoc(dbstores, swicfg):
-    # Process given file as raw text line by line
-
-    # for each srcID, if not indexed/parsed - then extract ngrams
-    for srcID in dbstores['docmeta']:
-        trace_log(_logSysLevel, _logTrace, {'SrcID':srcID}, context='Parsing')
-
-        # extract ngrams from normalised files
-        if not (not dbstores['docmeta'][srcID]['normalised'] or dbstores['docmeta'][srcID]['indexed']):
-            fileName = os.path.join(swicfg['srcdata'], srcID, 'normal.dat')
-            trace_log(_logSysLevel, _logTrace, {'Filename':fileName}, context='Index Starting')
-
-            if os.path.isfile(fileName):
-                # Generate Vectorization of ngrams and strip stop words
-                vectorizer = CountVectorizer(ngram_range=(1, swicfg['ngram']))
-                ngramAnalyzer = vectorizer.build_analyzer()
-
-                # Redirect stdout to tqdm.write() (don't forget the `as save_stdout`)
-                # Enables tqdm to control progress bar on screen location
-                with std_out_err_redirect_tqdm() as orig_stdout:
-                    # tqdm needs the original stdout
-                    # and dynamic_ncols=True to autodetect console width
-                    with open(fileName, mode='rt', errors='ignore') as readFile:
-                        readFileInMem = readFile.read()
-
-                    # Build a list of line end (\n) locations before replacing them
-                    # the index of the match is the line number/ LineID
-                    trace_log(_logSysLevel, _logInfo, 'ngram - '+str(fileName)+' building line index from file...')
-                    lineEndIndex = sorted([match.start() for match in re.finditer(r'\n', readFileInMem)])
-
-                    # Grab every ngram in file and record of it's existence in srcID
-                    # Will also create & record ngram's across line breaks
-                    trace_log(_logSysLevel, _logInfo,  'ngram - '+str(fileName)+' builing list from file...')
-                    readFileInMem.replace('\n', ' ')
-                    ngramList = sorted(list(set(ngramAnalyzer(readFileInMem))))
-
-                    docmeta_src_ngrams_add(dbstores, srcID, ngramList)
-                    trace_log(_logSysLevel, _logInfo,
-                              {'Filename': fileName, 'nGramCount': len(ngramList), 'ngramSample': ngramList[-50:]},
-                              context= 'ngram - '+str(fileName)+' builing list from file...finished')
-
-                    trace_log(_logSysLevel, _logInfo,  'ngram - '+str(fileName)+' parsing ngram list for Line & Dictionary...')
-                    srcIDngramCount = dict()
-                    srcIDngramLineList = dict()
-                    for ngram in tqdm(ngramList, file=orig_stdout, dynamic_ncols=True):
-
-                        # if ngram is a single word, ensure it is in the dictionary
-                        if len(ngram.split(' ')) == 1:
-                            dict_parse_words(dbstores, swicfg, ngram, xcheck=False)
-
-                        # Capture the starting index of every ngram, even if it crosses a line break
-                        # For every position, find the last indexed line end, so we are on the next line (+1)
-                        # note; set returns results sorted when purely numeric values
-                        srcIDngramLineList[ngram] = list(set([bisect_left(lineEndIndex, index) + 1 for index in [match.start() for match in re.finditer(re.escape(ngram), readFileInMem)]]))
-                        srcIDngramCount[ngram] = len(srcIDngramLineList[ngram])
-
-                    trace_log(_logSysLevel, _logInfo,  'ngram - '+str(fileName)+' parsing ngram list...finished')
-
-                    ngram_full_src_update(dbstores, srcID, srcIDngramCount)
-                    docstat_full_src_update(dbstores, srcID, srcIDngramLineList)
-
-                dbstores['docmeta'][srcID]['indexed'] = True
-                dbstores['docmeta'].sync()
-                dbstores['docstat'].sync()
-                dbstores['ngram'].sync()
-                trace_log(_logSysLevel, _logInfo, 'ngram - '+str(fileName)+' Indexing Finished')
-            else:
-                trace_log(_logSysLevel, _logError, 'ngram - '+str(fileName)+' Indexing File Missing')
-
-    return
-
-
 def ngram_full_src_update(dbstores, srcID, srcIDngramCount):
-    # Redirect stdout to tqdm.write() (don't forget the `as save_stdout`)
-    # Enables tqdm to control progress bar on screen location
-    with std_out_err_redirect_tqdm() as orig_stdout:
-    # tqdm needs the original stdout
-    # and dynamic_ncols=True to autodetect console width
-        for ngram in tqdm(srcIDngramCount, desc='Updating '+srcID, file=orig_stdout, dynamic_ncols=True):
-            if ngram not in dbstores['ngram']:
-                dbstores['ngram'][ngram] = dict()
-            dbstores['ngram'][ngram][srcID] = srcIDngramCount[ngram]
-        dbstores['ngram'].sync()
+    for ngram in tqdm(srcIDngramCount, desc='Updating '+srcID, dynamic_ncols=True, position=0):
+        if ngram not in dbstores['ngram']:
+            dbstores['ngram'][ngram] = dict()
+        dbstores['ngram'][ngram][srcID] = srcIDngramCount[ngram]
+    dbstores['ngram'].sync()
     return
 
 
@@ -1181,11 +1052,10 @@ def docmeta_src_ngrams_add(dbstores, srcID, ngramList):
         dbstores['docmeta'][srcID] = dict()
 
     dbstores['docmeta'][srcID]['ngrams'] = ngramList
+    dbstores['docmeta'].sync()
 
     trace_log(_logSysLevel, _logInfo, dbstores['docmeta'][srcID]['ngrams'][-50:],
               context='DocMeta updated ' + srcID)
-
-    dbstores['docmeta'].sync()
 
     return
 
@@ -1199,11 +1069,11 @@ def docstat_src_ngram_lines(dbstores, srcID, ngram, lineList):
         dbstores['docstat'][srcID] = dict()
 
     dbstores['docstat'][srcID][ngram] = lineList
+    dbstores['docstat'].sync()
 
     trace_log(_logSysLevel, _logInfo, dbstores['docstat'][srcID][ngram][-50:],
               context='DocStat ' + srcID + ' / ' + ngram)
 
-    dbstores['docstat'].sync()
 
     return
 
@@ -1239,4 +1109,69 @@ def src_ngram_add(dbstores, ngram, lineID, srcID):
 
     dbstores['docstat'].sync()
 
+    return
+
+
+def ngram_srcdoc(dbstores, swicfg):
+    # Process given file as raw text line by line
+
+    # for each srcID, if not indexed/parsed - then extract ngrams
+    for srcID in dbstores['docmeta']:
+        trace_log(_logSysLevel, _logTrace, {'SrcID':srcID}, context='Parsing')
+
+        # extract ngrams from normalised files
+        if not (not dbstores['docmeta'][srcID]['normalised'] or dbstores['docmeta'][srcID]['indexed']):
+            fileName = os.path.join(swicfg['srcdata'], srcID, 'normal.dat')
+            trace_log(_logSysLevel, _logTrace, {'Filename':fileName}, context='Index Starting')
+
+            if os.path.isfile(fileName):
+                # Generate Vectorization of ngrams and strip stop words
+                vectorizer = CountVectorizer(ngram_range=(1, swicfg['ngram']))
+                ngramAnalyzer = vectorizer.build_analyzer()
+
+                with open(fileName, mode='rt', errors='ignore') as readFile:
+                    readFileInMem = readFile.read()
+
+                # Build a list of line end (\n) locations before replacing them
+                # the index of the match is the line number/ LineID
+                trace_log(_logSysLevel, _logInfo, 'ngram - '+str(fileName)+' building line index from file...')
+                lineEndIndex = sorted([match.start() for match in re.finditer(r'\n', readFileInMem)])
+
+                # Grab every ngram in file and record of it's existence in srcID
+                # Will also create & record ngram's across line breaks
+                trace_log(_logSysLevel, _logInfo,  'ngram - '+str(fileName)+' building list from file...')
+                readFileInMem.replace('\n', ' ')
+                ngramList = sorted(list(set(ngramAnalyzer(readFileInMem))))
+
+                docmeta_src_ngrams_add(dbstores, srcID, ngramList)
+
+                for ngram in tqdm([ngram for ngram in ngramList if len(ngram.split(' ')) == 1], desc='xCheck Ngram/Dictionary', dynamic_ncols=True, position=0):
+                    dict_parse_words(dbstores, swicfg, ngram, xcheck=True)
+
+                trace_log(_logSysLevel, _logInfo,
+                          {'Filename': fileName, 'nGramCount': len(ngramList), 'ngramSample': ngramList[-50:]},
+                          context= 'ngram - '+str(fileName)+' building list from file...finished')
+
+                trace_log(_logSysLevel, _logInfo,  'ngram - '+str(fileName)+' parsing ngram list for Line & Dictionary...')
+                srcIDngramCount = dict()
+                srcIDngramLineList = dict()
+                for ngram in tqdm(ngramList, desc='Ngram Indexing', dynamic_ncols=True, position=0):
+                    # Capture the starting index of every ngram, even if it crosses a line break
+                    # For every position, find the last indexed line end, so we are on the next line (+1)
+                    # note; set returns results sorted when purely numeric values
+                    srcIDngramLineList[ngram] = list(set([bisect_left(lineEndIndex, index) + 1 for index in [match.start() for match in re.finditer(re.escape(ngram), readFileInMem)]]))
+                    srcIDngramCount[ngram] = len(srcIDngramLineList[ngram])
+
+                trace_log(_logSysLevel, _logInfo,  'ngram - '+str(fileName)+' parsing ngram list...finished')
+
+                ngram_full_src_update(dbstores, srcID, srcIDngramCount)
+                docstat_full_src_update(dbstores, srcID, srcIDngramLineList)
+
+                dbstores['docmeta'][srcID]['indexed'] = True
+                dbstores['docmeta'].sync()
+                dbstores['docstat'].sync()
+                dbstores['ngram'].sync()
+                trace_log(_logSysLevel, _logInfo, 'ngram - '+str(fileName)+' Indexing Finished')
+            else:
+                trace_log(_logSysLevel, _logError, 'ngram - '+str(fileName)+' Indexing File Missing')
     return

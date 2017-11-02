@@ -106,50 +106,41 @@ def word2vec():
     swi.trace_log(_logSysLevel, _logInfo,
                   'Building Consolidated Vector List...', context='Word2Vec')
 
-    # Redirect stdout to tqdm.write() (don't forget the `as save_stdout`)
-    # Enables tqdm to control progress bar on screen location
-    with swi.std_out_err_redirect_tqdm() as orig_stdout:
-        # tqdm needs the original stdout
-        # and dynamic_ncols=True to autodetect console width
+    for srcID in tqdm(dbstores['docmeta'], dynamic_ncols=True, position=0):
+        swi.trace_log(_logSysLevel, _logTrace,
+                      srcID, context='Word2Vec - Checking srcID')
 
-        for srcID in tqdm(dbstores['docmeta'], file=orig_stdout, dynamic_ncols=True):
-            swi.trace_log(_logSysLevel, _logTrace,
-                          srcID, context='Word2Vec - Checking srcID')
+        if srcID in dbstores['vectorized']:
+            if len(dbstores['vectorized'][srcID]) > 0 \
+                    and len(dbstores['docmeta'][srcID]['wordcount']) > 0:
 
-            # if dbstores['docmeta'][srcID]['vector'] and srcID in dbstores['vectorized']:
-            if srcID in tqdm(dbstores['vectorized'], file=orig_stdout, dynamic_ncols=True):
-                if len(dbstores['vectorized'][srcID]) > 0 \
-                        and len(dbstores['docmeta'][srcID]['wordcount']) > 0:
+                swi.trace_log(_logSysLevel, _logTrace,
+                              srcID, context='Word2Vec - Adding srcID')
+                w2vdbstore['vectors'].extend(dbstores['vectorized'][srcID])
 
-                    swi.trace_log(_logSysLevel, _logTrace,
-                                  srcID, context='Word2Vec - Adding srcID')
-                    w2vdbstore['vectors'].extend(dbstores['vectorized'][srcID])
+                swi.trace_log(_logSysLevel, _logTrace,
+                              srcID, context='Word2Vec - Updating Vector Set')
+                w2vdbstore['vectorset'].update(dbstores['vectorized'][srcID])
 
-                    swi.trace_log(_logSysLevel, _logTrace,
-                                  srcID, context='Word2Vec - Updating Vector Set')
-                    w2vdbstore['vectorset'].update(dbstores['vectorized'][srcID])
+                w2vdbstore.sync()
+                swi.trace_log(_logSysLevel, _logTrace,
+                              w2vdbstore['vectors'], context='Word2Vec - Extended vectors')
 
-                    w2vdbstore.sync()
-                    swi.trace_log(_logSysLevel, _logTrace,
-                                  w2vdbstore['vectors'], context='Word2Vec - Extended vectors')
-
-                    wordCounts += dbstores['docmeta'][srcID]['wordcount']
-                    swi.trace_log(_logSysLevel, _logTrace,
-                                  wordCounts, context='Word2Vec - Updated wordCounts')
+                wordCounts += dbstores['docmeta'][srcID]['wordcount']
+                swi.trace_log(_logSysLevel, _logTrace,
+                              wordCounts, context='Word2Vec - Updated wordCounts')
 
     swi.trace_log(_logSysLevel, _logInfo,
                   w2vdbstore['vectors'], context='Word2Vec - Consolidated Vectors')
 
-    # convert Counter() dict to [key, value] list in list
     swi.trace_log(_logSysLevel, _logInfo,
                   'Converting Word Counts to Sorted List by Count...', context='Word2Vec')
 
-    for word, wordcount in [(word, wordCounts[word]) for word in sorted(wordCounts,
-                                                                        key=wordCounts.get,
-                                                                        reverse=True)]:
-
+    # convert Counter() dict to [key, value] list in list
+    for word, wordcount in [(word, wordCounts[word])
+                            for word
+                            in sorted(wordCounts, key=wordCounts.get, reverse=True)]:
         w2vdbstore['counts'].append([word, wordcount])
-    w2vdbstore.sync()
 
     swi.trace_log(_logSysLevel, _logInfo,
                   w2vdbstore['counts'], context='Word2Vec - Consolidated Counts')
@@ -161,7 +152,6 @@ def word2vec():
                          if dbstores['dict'][word] in w2vdbstore['vectorset'] ]:
         w2vdbstore['dict'][word] = vector
         w2vdbstore['revdict'][vector] = word
-    w2vdbstore.sync()
 
     swi.trace_log(_logSysLevel, _logInfo,
                   w2vdbstore['revdict'], context='Word2Vec - Reverse Dictionary')
@@ -169,6 +159,7 @@ def word2vec():
                   'RevDict '+str(len(w2vdbstore['revdict']))+' / '+str(len(set(w2vdbstore['vectors'])))+' Unique Vectors', context='Word2Vec - RevDict vs Unique Vectors')
     swi.trace_log(_logSysLevel, _logInfo,
                   'Syncing and saving datastore...', context='Word2Vec')
+
     w2vdbstore.sync()
     w2vdbstore.close()
 
@@ -186,87 +177,87 @@ def system_analyse():
 
     line = '-' * 80
 
-    print(line)
-    print('Config File Info')
-    print(line)
-    print('Config Record Count:', len(dbstores['config'].keys()))
+    tqdm.write(line)
+    tqdm.write('Config File Info')
+    tqdm.write(line)
+    tqdm.write('Config Record Count:', len(dbstores['config'].keys()))
     swi.trace_log(_logConfig, _logStatus, swicfg, 'Config Key & Value Pairs')
 
     dictVector = max(dbstores['dict'].values())
     vecVector = max(dbstores['vectors']['vectors'].keys())
     vector = swi.dictionary_vector(dbstores)
-    print('Vector Trace: Highest Dictionary / Highest Vectors / Current Counter', dictVector, '/', vecVector, '/', vector)
+    tqdm.write('Vector Trace: Highest Dictionary / Highest Vectors / Current Counter', dictVector, '/', vecVector, '/', vector)
 
-    print(line)
-    print('DocMeta File Info')
-    print(line)
-    print('DocMeta Record Count:', len(dbstores['docmeta'].keys()))
-    print('Ten Random Samples:')
+    tqdm.write(line)
+    tqdm.write('DocMeta File Info')
+    tqdm.write(line)
+    tqdm.write('DocMeta Record Count:', len(dbstores['docmeta'].keys()))
+    tqdm.write('Ten Random Samples:')
     keyList = list(dbstores['docmeta'].keys())
     random.shuffle(keyList)
     for key in keyList[:10]:
         swi.trace_log(_logConfig, _logStatus, dbstores['docmeta'][key], 'DocMeta ' + key)
 
-    print(line)
-    print('DocStat File Info')
-    print(line)
-    print('DocStat Record Count:', len(dbstores['docstat'].keys()))
-    print('Ten Random Samples:')
+    tqdm.write(line)
+    tqdm.write('DocStat File Info')
+    tqdm.write(line)
+    tqdm.write('DocStat Record Count:', len(dbstores['docstat'].keys()))
+    tqdm.write('Ten Random Samples:')
     keyList = list(dbstores['docstat'].keys())
     random.shuffle(keyList)
     for key in keyList[:10]:
         swi.trace_log(_logConfig, _logStatus, dbstores['docstat'][key], 'DocStat ' + key)
 
-    print(line)
-    print('Ngram File Info')
-    print(line)
-    print('Ngram Record Count:', len(dbstores['ngram'].keys()))
-    print('Ten Random Samples:')
+    tqdm.write(line)
+    tqdm.write('Ngram File Info')
+    tqdm.write(line)
+    tqdm.write('Ngram Record Count:', len(dbstores['ngram'].keys()))
+    tqdm.write('Ten Random Samples:')
     keyList = list(dbstores['ngram'].keys())
     random.shuffle(keyList)
     for key in keyList[:10]:
         swi.trace_log(_logConfig, _logStatus, dbstores['ngram'][key], 'Ngram ' + key)
 
-    print(line)
-    print('Sources File Info')
-    print(line)
-    print('Sources Record Count:', len(dbstores['sources'].keys()))
-    print('Ten Random Samples:')
+    tqdm.write(line)
+    tqdm.write('Sources File Info')
+    tqdm.write(line)
+    tqdm.write('Sources Record Count:', len(dbstores['sources'].keys()))
+    tqdm.write('Ten Random Samples:')
     keyList = list(dbstores['sources'].keys())
     random.shuffle(keyList)
     for key in keyList[:10]:
         swi.trace_log(_logConfig, _logStatus, dbstores['sources'][key], 'Source ' + key)
 
 
-    print(line)
-    print('Dictionary & Vector File Info')
-    print(line)
-    print('Dictionary & Vector Key Counts (Should be Equal):', len(dbstores['dict'].keys()), '/', len(dbstores['vectors']['vectors'].keys()))
-    print('Dictionary & Vectors (inc Validation) (word->vector->word):')
+    tqdm.write(line)
+    tqdm.write('Dictionary & Vector File Info')
+    tqdm.write(line)
+    tqdm.write('Dictionary & Vector Key Counts (Should be Equal):', len(dbstores['dict'].keys()), '/', len(dbstores['vectors']['vectors'].keys()))
+    tqdm.write('Dictionary & Vectors (inc Validation) (word->vector->word):')
     keyList = list(dbstores['dict'].keys())
     random.shuffle(keyList)
     for key in keyList[:10]:
-        print(key, '(word) ->', dbstores['dict'][key], '(vector) ->', dbstores['vectors']['vectors'][dbstores['dict'][key]], '(word)')
+        tqdm.write(key, '(word) ->', dbstores['dict'][key], '(vector) ->', dbstores['vectors']['vectors'][dbstores['dict'][key]], '(word)')
         swi.dict_parse_words(dbstores, swicfg, [key], xcheck=True)
 
-    print(line)
-    print('Vector & Dictionary (inc Validation) (vector->word->vector):')
-    print(line)
+    tqdm.write(line)
+    tqdm.write('Vector & Dictionary (inc Validation) (vector->word->vector):')
+    tqdm.write(line)
     keyList = list(dbstores['vectors']['vectors'].keys())
     random.shuffle(keyList)
     for key in keyList[:10]:
-        print(key, '(vector) ->', dbstores['vectors']['vectors'][key], '(word) ->', dbstores['dict'][dbstores['vectors']['vectors'][key]], '(vector)')
+        tqdm.write(key, '(vector) ->', dbstores['vectors']['vectors'][key], '(word) ->', dbstores['dict'][dbstores['vectors']['vectors'][key]], '(vector)')
         swi.dict_parse_words(dbstores, swicfg, [dbstores['vectors']['vectors'][key]], xcheck=True)
 
-    print(line)
-    print('Vectorized Datastore:')
-    print(line)
+    tqdm.write(line)
+    tqdm.write('Vectorized Datastore:')
+    tqdm.write(line)
     keyList = list(dbstores['vectorized'].keys())
     random.shuffle(keyList)
     for key in keyList[:10]:
         swi.trace_log(_logConfig, _logStatus, dbstores['vectorized'][key], 'Source ' + key)
 
-    print(line)
+    tqdm.write(line)
 
     swi.close_datastores(dbstores)
     return
@@ -295,19 +286,19 @@ def search(searchText, similarity=True, openclose=True, dbstores=None, swicfg=No
 
     topSrcMatches, topSrcInfo, unseenNgrams = swi.calc_matches(dbstores, ngramList, 10)
 
-    print('-'*80)
-    print('topSrcMatches:')
+    tqdm.write('-'*80)
+    tqdm.write('topSrcMatches:')
     for index in range(0, len(topSrcMatches)):
         srcID = topSrcMatches[index]
-        print(str(index+1).rjust(4), ':',
-              dbstores['docmeta'][srcID]['cat'],
-              dbstores['docmeta'][srcID]['subcat'],
-              str(srcID),
-              str(topSrcInfo[srcID]['score']).ljust(22),
-              str(topSrcInfo[srcID]['ngrams']).rjust(4),
-              dbstores['docmeta'][srcID]['path'])
-
-    print('-'*80)
+        tqdm.write(' '.join([str(index+1).rjust(4),
+                             ':',
+                             dbstores['docmeta'][srcID]['cat'],
+                             dbstores['docmeta'][srcID]['subcat'],
+                             str(srcID),
+                             str(topSrcInfo[srcID]['score']).ljust(22),
+                             str(topSrcInfo[srcID]['ngrams']).rjust(4),
+                             dbstores['docmeta'][srcID]['path']] ))
+    tqdm.write('-'*80)
 
     swi.trace_log(_logSysLevel, _logStatus,
                   sorted(ngramList), context='Search - ngrams used')
@@ -352,7 +343,6 @@ def index_files():
 
     for root, dirs, files in os.walk(swicfg['corpus']):
         for fileName in files:
-            print(root, dirs, fileName)
             if fileName.endswith((".txt",".TXT",".Txt")): fileList.append(os.path.join(root, fileName))
 
     swi.trace_log(_logSysLevel, _logInfo, 'Found '+str(len(fileList))+' '+srcCat+' of '+srcSubCat+' to scan')
@@ -383,38 +373,20 @@ def validate_dict():
     # Force Scan of every Dictionary <-> Vector Pair
 
     line = '-' * 80
-    print(line)
+    tqdm.write(line)
     swi.trace_log(_logSysLevel, _logStatus, 'Validating Dictionary...')
     dbstores = swi.open_datastores()
     swicfg = swi.sys_config(dbstores)
     total = len(dbstores['dict'].keys())
 
     swi.trace_log(_logSysLevel, _logStatus, 'Checking Vector...')
-    # minVector = max(dbstores['vectors']['vectors'].keys())
-    # vector = swi.dictionary_vector(dbstores, lowest=True)
 
-    # if vector <= minVector:
-    #   oldVector = vector
-    #   dbstores['config']['nextvector'] = minVector
-    #   dbstores['config'].sync()
-    #   vector = swi.dictionary_vector(dbstores)
-    #   swi.trace_log(_logSysLevel, _logStatus, {'OldVector': oldVector, 'NewVector': vector, 'MinVector': minVector}, context='Bad Next Vector Found')
-
-    # Redirect stdout to tqdm.write() (don't forget the `as save_stdout`)
-    # Enables tqdm to control progress bar on screen location
-    with swi.std_out_err_redirect_tqdm() as orig_stdout:
-        # tqdm needs the original stdout
-        # and dynamic_ncols=True to autodetect console width
-        # count = 0
-        for word in tqdm(list(dbstores['dict'].keys()), file=orig_stdout, dynamic_ncols=True, desc='Words/Vectors'):
-            swi.dict_parse_words(dbstores, swicfg, [word], xcheck=True)
-            # if count % 100 == 0:
-            #     swi.trace_log(_logSysLevel, _logStatus, 'Progress: ' + str(count).rjust(len(str(total))+1) + ' of ' + str(total) + ' Last Vector: ' + str(dbstores['config']['nextvector']) + ' - ' + word)
-            # count += 1
+    for word in tqdm(list(dbstores['dict'].keys()), desc='Words/Vectors', dynamic_ncols=True, position=0):
+        swi.dict_parse_words(dbstores, swicfg, [word], xcheck=True)
 
     swi.trace_log(_logSysLevel, _logStatus, 'Number of keys Dict: ' + str(len(dbstores['dict'].keys())))
     swi.trace_log(_logSysLevel, _logStatus, 'Number of keys Vect: ' + str(len(dbstores['vectors']['vectors'].keys())))
-    print(line)
+    tqdm.write(line)
 
     swi.close_datastores(dbstores)
     return
@@ -426,20 +398,20 @@ def main(argv):
     helpText = 'USAGE: SearchWithInference.py [-h|--help]|[-a|--analyse|--stats]|[-i|--index]|[--stopwords|--import-stopwords|--load-stopwords]|<[-s|--search|--find] "text">'
 
     if len(argv) == 0:
-        print(helpText)
+        tqdm.write(helpText)
         sys.exit(2)
 
     try:
         opts, args = getopt.getopt(argv,"ahiws:",["analyse", "analysis", "analyze", "help", "index", "search=", "stats", "statistics", "w2v", "word2vect", "word2vectorize", "valdict", "stopwords", "import-stopwords", "load-stopwords"])
     except getopt.GetoptError:
-        print(helpText)
-        print()
+        tqdm.write(helpText)
+        tqdm.write('\n')
         sys.exit(2)
 
     for opt, arg in opts:
         if opt in ('-h', '--help'):
             swi.trace_log(_logSysLevel, _logInfo, 'Arg - Help')
-            print(helpText)
+            tqdm.write(helpText)
             sys.exit()
         elif opt in ("-i", "--index"):
             swi.trace_log(_logSysLevel, _logInfo, 'Arg - Index')
@@ -465,7 +437,6 @@ def main(argv):
             swi.trace_log(_logSysLevel, _logInfo, 'Arg - Import Stopwords')
             swi.import_stopwords()
             sys.exit()
-
     return
 
 
