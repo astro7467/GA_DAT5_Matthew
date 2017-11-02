@@ -1150,7 +1150,7 @@ def ngram_full_src_update(dbstores, srcID, srcIDngramCount):
     # and dynamic_ncols=True to autodetect console width
         for ngram in tqdm(srcIDngramCount, desc='Updating '+srcID, file=orig_stdout, dynamic_ncols=True):
             if ngram not in dbstores['ngram']:
-                dbstores['ngram'][ngram] = dict{}
+                dbstores['ngram'][ngram] = dict()
             dbstores['ngram'][ngram][srcID] = srcIDngramCount[ngram]
         dbstores['ngram'].sync()
     return
